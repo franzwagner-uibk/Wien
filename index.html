@@ -635,7 +635,7 @@
             <div style="font-weight:700;margin-bottom:4px;">${p.HOFNAME || "Gemeindebau"}</div>
             <div><strong>Baujahr:</strong> ${p.BAUJAHR || "-"}</div>
             <div><strong>Adresse:</strong> ${p.ADRESSE || "-"}</div>
-            wohnCountEl.innerHTML = `Wohnungen: <strong>${sumWohn.toLocaleString("de-DE")}</strong>`;
+            <div><strong>Wohnungsanzahl:</strong> ${p.WOHNUNGSANZAHL ?? "-"}</div>
             <div><strong>Bezirk:</strong> ${p.BEZIRK ?? "-"}</div>
             <div><a href="${p.PDFLINK || "#"}" target="_blank" rel="noopener">PDF</a></div>
           `;
