@@ -65,8 +65,13 @@
       cursor: pointer;
       outline: none;
       list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
     details.legend summary::-webkit-details-marker { display: none; }
+    details.legend summary::before { content: "▸"; font-size: 12px; }
+    details.legend[open] summary::before { content: "▾"; }
     .legend-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 3px 0; }
     .legend-swatch { width: 22px; height: 12px; border: 1px solid #333; border-radius: 3px; flex-shrink: 0; }
     .ol-popup {
@@ -107,8 +112,8 @@
     </div>
     <div style="margin-top:8px; margin-bottom:6px;" class="toggle-row">
       <div><strong>Basemap:</strong></div>
-      <label><input type="radio" name="basemap" value="bmap"> Topo</label>
-      <label><input type="radio" name="basemap" value="ortho" checked> Orthofoto</label>
+      <label><input type="radio" name="basemap" value="bmap" checked> Topo</label>
+      <label><input type="radio" name="basemap" value="ortho"> Orthofoto</label>
       <label><input id="gemeindebau-toggle" type="checkbox" checked> Gemeindebau</label>
     </div>
     <div style="margin-top:4px;">
@@ -119,7 +124,7 @@
       </div>
       <div id="year-labels" style="font-size:12px; margin-top:2px;">1743 – 2025</div>
     </div>
-    <details class="legend" id="legend" open>
+    <details class="legend" id="legend">
       <summary>Legende</summary>
       <div id="legend-content"></div>
     </details>
@@ -150,7 +155,7 @@
           key = `d${idx}`;
         }
       }
-      const width = Math.max(1.6, Math.min(8, 0.7 + resolution / 16)); // ensure visibility when zoomed out
+      const width = Math.max(2.2, Math.min(9, 1.2 + resolution / 12)); // ensure visibility when zoomed out
       const cacheKey = `${key}-${Math.round(width * 10)}`; // bucket by width
       if (!styleCache[cacheKey]) {
         let fillColor = "#cccccc";
@@ -178,7 +183,7 @@
         crossOrigin: "anonymous",
         maxZoom: 19
       }),
-      visible: false
+      visible: true
     });
     const baseLayerOrtho = new ol.layer.Tile({
       source: new ol.source.XYZ({
@@ -187,7 +192,7 @@
         crossOrigin: "anonymous",
         maxZoom: 19
       }),
-      visible: true
+      visible: false
     });
 
     const map = new ol.Map({
@@ -201,6 +206,8 @@
         maxZoom: 19
       })
     });
+    // keep polygons always on top
+    gemeindebauLayer.setZIndex(10);
 
     document.querySelectorAll("input[name='basemap']").forEach((radio) => {
       radio.addEventListener("change", () => {
