@@ -315,8 +315,10 @@
         yearLabels.textContent = `(${yearMin.value} – ${yearMax.value})`;
 
         const applyFilter = () => {
-          const lo = Math.min(parseInt(yearMin.value, 10), parseInt(yearMax.value, 10));
-          const hi = Math.max(parseInt(yearMin.value, 10), parseInt(yearMax.value, 10));
+          let lo = parseInt(yearMin.value, 10);
+          let hi = parseInt(yearMax.value, 10);
+          if (lo > hi) { lo = hi; yearMin.value = lo; }
+          if (hi < lo) { hi = lo; yearMax.value = hi; }
           yearLabels.textContent = `(${lo} – ${hi})`;
           const filtered = allFeatures.filter((f) => {
             const y = parseInt(f.get("BAUJAHR"), 10);
@@ -327,8 +329,18 @@
           const sumWohn = filtered.reduce((acc, f) => acc + (parseInt(f.get("WOHNUNGSANZAHL"), 10) || 0), 0);
           wohnCountEl.textContent = `Wohnungsanzahl: ${sumWohn.toLocaleString("de-DE")}`;
         };
-        yearMin.addEventListener("input", applyFilter);
-        yearMax.addEventListener("input", applyFilter);
+        yearMin.addEventListener("input", () => {
+          if (parseInt(yearMin.value, 10) > parseInt(yearMax.value, 10)) {
+            yearMax.value = yearMin.value;
+          }
+          applyFilter();
+        });
+        yearMax.addEventListener("input", () => {
+          if (parseInt(yearMax.value, 10) < parseInt(yearMin.value, 10)) {
+            yearMin.value = yearMax.value;
+          }
+          applyFilter();
+        });
 
         vectorSource.addFeatures(allFeatures);
         applyFilter();
