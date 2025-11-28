@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Süßmaus Karte Gemeindebau Wien</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/ol.css">
+  <style>
+    html, body { margin: 0; height: 100%; }
+    #map { width: 100%; height: 100%; }
+    .panel {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 1000;
+      background: rgba(255, 255, 255, 0.92);
+      padding: 10px 12px;
+      border-radius: 6px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    .panel h1 {
+      margin: 0 0 6px;
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .panel label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h1>Süßmaus Karte Gemeindebau Wien</h1>
+    <label><input id="gemeindebau-toggle" type="checkbox" checked> Gemeindebau</label>
+  </div>
+  <div id="map"></div>
+
+  <script type="module">
+    import Map from "https://cdn.jsdelivr.net/npm/ol@latest/Map.js";
+    import View from "https://cdn.jsdelivr.net/npm/ol@latest/View.js";
+    import TileLayer from "https://cdn.jsdelivr.net/npm/ol@latest/layer/Tile.js";
+    import VectorLayer from "https://cdn.jsdelivr.net/npm/ol@latest/layer/Vector.js";
+    import WMTS, { optionsFromCapabilities } from "https://cdn.jsdelivr.net/npm/ol@latest/source/WMTS.js";
+    import VectorSource from "https://cdn.jsdelivr.net/npm/ol@latest/source/Vector.js";
+    import WMTSCapabilities from "https://cdn.jsdelivr.net/npm/ol@latest/format/WMTSCapabilities.js";
+    import GeoJSON from "https://cdn.jsdelivr.net/npm/ol@latest/format/GeoJSON.js";
+    import { fromLonLat, get as getProjection } from "https://cdn.jsdelivr.net/npm/ol@latest/proj.js";
+    import { register } from "https://cdn.jsdelivr.net/npm/ol@latest/proj/proj4.js";
+    import proj4 from "https://cdn.jsdelivr.net/npm/proj4@2.9.1/+esm";
+    import Style from "https://cdn.jsdelivr.net/npm/ol@latest/style/Style.js";
+    import Fill from "https://cdn.jsdelivr.net/npm/ol@latest/style/Fill.js";
+    import Stroke from "https://cdn.jsdelivr.net/npm/ol@latest/style/Stroke.js";
+
+    const wmtsUrl = "https://mapsneu.wien.gv.at/basemap31256neu/1.0.0/WMTSCapabilities.xml";
+    const wfsUrl = "https://data.wien.gv.at/daten/geo";
+    const targetProjectionCode = "EPSG:31256";
+
+    // Register EPSG:31256 so OpenLayers can reproject and match the WMTS/WFS
+    proj4.defs(
+      targetProjectionCode,
+      "+proj=tmerc +lat_0=0 +lon_0=16 +k=1 +x_0=0 +y_0=-5000000 +ellps=bessel " +
+        "+towgs84=577.326,90.129,463.919,5.137,1.474,5.297,2.4232 +units=m +no_defs"
+    );
+    register(proj4);
+    const targetProjection = getProjection(targetProjectionCode);
+
+    async function buildMap() {
+      // Parse WMTS capabilities for basemap.at (EPSG:31256)
+      const wmtsResponse = await fetch(wmtsUrl);
+      if (!wmtsResponse.ok) {
+        throw new Error(`WMTS capabilities request failed (${wmtsResponse.status})`);
+      }
+      const capabilitiesText = await wmtsResponse.text();
+      const capabilities = new WMTSCapabilities().read(capabilitiesText);
+      const wmtsOptions = optionsFromCapabilities(capabilities, {
+        layer: "bmap",
+        matrixSet: "31256",
+        style: "farbe"
+      });
+
+      const basemap = new TileLayer({
+        source: new WMTS(wmtsOptions)
+      });
+
+      const gemeindebauSource = new VectorSource({
+        format: new GeoJSON(),
+        url: `${wfsUrl}?service=WFS&version=1.1.0&request=GetFeature&typeName=${encodeURIComponent(
+          "ogdwien:GEMBAUTENFLOGD"
+        )}&srsName=${encodeURIComponent(targetProjectionCode)}&outputFormat=application/json`
+      });
+
+      const gemeindebauLayer = new VectorLayer({
+        source: gemeindebauSource,
+        style: new Style({
+          stroke: new Stroke({ color: "#c0392b", width: 1.4 }),
+          fill: new Fill({ color: "rgba(192,57,43,0.25)" })
+        })
+      });
+
+      const map = new Map({
+        target: "map",
+        layers: [basemap, gemeindebauLayer],
+        view: new View({
+          projection: targetProjection,
+          center: fromLonLat([16.3738, 48.2082], targetProjection), // Vienna center in EPSG:31256
+          zoom: 12,
+          minZoom: 4,
+          maxZoom: 18
+        })
+      });
+
+      // Toggle visibility
+      const toggle = document.getElementById("gemeindebau-toggle");
+      toggle.addEventListener("change", () => {
+        gemeindebauLayer.setVisible(toggle.checked);
+      });
+    }
+
+    buildMap().catch((err) => {
+      console.error("Map setup failed:", err);
+      alert("Map setup failed. Please check the console for details.");
+    });
+  </script>
+</body>
+</html>
