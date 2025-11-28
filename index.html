@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Süßmaus Karte Gemeindebau Wien</title>
+  <title>S&uuml;&szlig;maus Karte Gemeindebau Wien</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/ol.css">
   <style>
     html, body { margin: 0; height: 100%; }
@@ -25,8 +25,19 @@
     }
     .panel h1 { margin: 0 0 6px; font-size: 16px; font-weight: 700; }
     .panel label { display: flex; align-items: center; gap: 6px; user-select: none; }
-    .slider-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
-    .slider-row input[type="range"] { flex: 1; }
+    .slider-row {
+      position: relative;
+      height: 36px;
+      margin-top: 4px;
+    }
+    .slider-row input[type="range"] {
+      position: absolute;
+      left: 0;
+      right: 0;
+      width: 100%;
+      margin: 0;
+      background: transparent;
+    }
     .toggle-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .search-box { margin-top: 8px; }
     .search-input {
@@ -59,6 +70,9 @@
       border: 1px solid #ddd;
       border-radius: 6px;
       background: #f5b342;
+      display: inline-block;
+      width: auto;
+      max-width: 100%;
     }
     details.legend summary {
       font-weight: 600;
@@ -70,13 +84,12 @@
       gap: 6px;
     }
     details.legend summary::-webkit-details-marker { display: none; }
-    details.legend summary::before { content: "▸"; font-size: 12px; }
-    details.legend[open] summary::before { content: "▾"; }
+    details.legend summary::before { content: ">"; font-size: 12px; }
+    details.legend[open] summary::before { content: "v"; }
     .legend-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 3px 0; }
     .legend-swatch { width: 22px; height: 12px; border: 1px solid #333; border-radius: 3px; flex-shrink: 0; }
+    .timelapse-row { display: flex; justify-content: flex-end; margin-top: 6px; }
     .timelapse-btn {
-      margin-top: 6px;
-      width: 100%;
       padding: 8px 10px;
       border: none;
       border-radius: 6px;
@@ -85,6 +98,9 @@
       font-weight: 700;
       cursor: pointer;
       box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }
     .timelapse-btn:hover { background: #f9a63f; }
     .timeline {
@@ -126,16 +142,16 @@
         transform: translateX(-50%);
         width: calc(100% - 24px);
       }
-    }
-    @media (max-width: 540px) {
       .toggle-row { justify-content: center; }
       details.legend { margin-top: 8px; }
+      .timelapse-btn { padding: 8px; }
+      .timelapse-btn .tl-label { display: none; }
     }
   </style>
 </head>
 <body>
   <div class="panel">
-    <h1>Süßmaus Karte Gemeindebau Wien</h1>
+    <h1>S&uuml;&szlig;maus Karte Gemeindebau Wien</h1>
     <div class="search-box">
       <div style="position:relative;">
         <input id="hof-search" class="search-input" type="text" placeholder="Suche (HOFNAME) – min. 3 Zeichen" autocomplete="off">
@@ -154,12 +170,15 @@
         <input id="year-min" type="range" min="1743" max="2025" value="1743">
         <input id="year-max" type="range" min="1743" max="2025" value="2025">
       </div>
+      <div id="wohnungs-count" style="font-size:12px; margin-top:4px;">Wohnungsanzahl: -</div>
     </div>
     <details class="legend" id="legend">
       <summary>Legende</summary>
       <div id="legend-content"></div>
     </details>
-    <button id="timelapse-btn" class="timelapse-btn">▶️ Timelapse</button>
+    <div class="timelapse-row">
+      <button id="timelapse-btn" class="timelapse-btn"><span>▶</span><span class="tl-label">Timelapse</span></button>
+    </div>
     <div id="timeline" class="timeline">
       <div style="font-weight:600;">Timeline <span id="timeline-year"></span></div>
       <div class="timeline-bar">
@@ -173,7 +192,7 @@
   <script>
     const targetProjection = ol.proj.get("EPSG:3857");
     const minYearBase = 1743;
-    const esriAttribution = 'Tiles © Esri';
+    const esriAttribution = "Tiles \u00a9 Esri";
 
     const vectorSource = new ol.source.Vector();
     const decadeColors = [
@@ -194,7 +213,7 @@
         }
       }
       const width = Math.max(2.2, Math.min(9, 1.2 + resolution / 12)); // ensure visibility when zoomed out
-      const cacheKey = `${key}-${Math.round(width * 10)}`; // bucket by width
+      const cacheKey = `${key}-${Math.round(width * 10)}`;
       if (!styleCache[cacheKey]) {
         let fillColor = "#cccccc";
         if (key === "<1900") fillColor = decadeColors[0];
@@ -244,7 +263,6 @@
         maxZoom: 19
       })
     });
-    // keep polygons always on top
     gemeindebauLayer.setZIndex(10);
 
     document.querySelectorAll("input[name='basemap']").forEach((radio) => {
@@ -260,7 +278,6 @@
     const searchInput = document.getElementById("hof-search");
     const suggestionsBox = document.getElementById("hof-suggestions");
 
-    // Popup overlay
     const popupEl = document.createElement("div");
     popupEl.className = "ol-popup";
     const popup = new ol.Overlay({
@@ -269,7 +286,6 @@
     });
     map.addOverlay(popup);
 
-    // Load local GeoJSON and set up filtering
     fetch("GEMBAUTENFLOGD.json")
       .then((r) => {
         if (!r.ok) throw new Error(`GeoJSON load failed (${r.status})`);
@@ -290,6 +306,7 @@
         const yearMin = document.getElementById("year-min");
         const yearMax = document.getElementById("year-max");
         const yearLabels = document.getElementById("year-labels");
+        const wohnCountEl = document.getElementById("wohnungs-count");
         yearMin.min = minYearBase; yearMin.max = maxYear; yearMin.value = Math.max(minYearBase, minYear);
         yearMax.min = minYearBase; yearMax.max = maxYear; yearMax.value = maxYear;
         yearLabels.textContent = `(${yearMin.value} – ${yearMax.value})`;
@@ -304,6 +321,9 @@
           });
           vectorSource.clear(true);
           vectorSource.addFeatures(filtered);
+
+          const sumWohn = filtered.reduce((acc, f) => acc + (parseInt(f.get("WOHNUNGSANZAHL"), 10) || 0), 0);
+          wohnCountEl.textContent = `Wohnungsanzahl: ${sumWohn.toLocaleString("de-DE")}`;
         };
         yearMin.addEventListener("input", applyFilter);
         yearMax.addEventListener("input", applyFilter);
@@ -311,7 +331,6 @@
         vectorSource.addFeatures(allFeatures);
         applyFilter();
 
-        // Legend
         const legendEl = document.getElementById("legend-content");
         const legendItems = [
           { label: "< 1900", color: decadeColors[0] }
@@ -324,7 +343,6 @@
           `<div class="legend-row"><span class="legend-swatch" style="background:${item.color};"></span><span>${item.label}</span></div>`
         ).join("");
 
-        // Search index
         const nameIndex = allFeatures
           .map((f) => ({
             id: f.getId() || f.ol_uid,
@@ -390,25 +408,24 @@
           suggestionsBox.style.display = "none";
         });
 
-        // Timelapse controls
         const tlBtn = document.getElementById("timelapse-btn");
         const timeline = document.getElementById("timeline");
         const tlYear = document.getElementById("timeline-year");
         const tlProgress = document.getElementById("timeline-progress");
         let tlTimer = null;
-        const TL_START = Math.max(minYearBase, Math.min(minYearBase, minYearBase));
+        const TL_START = minYearBase;
         const TL_END = Math.min(2023, maxYear);
 
         const stopTimelapse = () => {
-          if (tlTimer) clearInterval(tlTimer);
+          if (tlTimer) clearTimeout(tlTimer);
           tlTimer = null;
-          tlBtn.textContent = "▶️ Timelapse";
+          tlBtn.innerHTML = '<span>▶</span><span class="tl-label">Timelapse</span>';
           timeline.style.display = "none";
         };
 
         const startTimelapse = () => {
           timeline.style.display = "block";
-          tlBtn.textContent = "⏸️ Stop";
+          tlBtn.innerHTML = '<span>⏸</span><span class="tl-label">Stop</span>';
           let current = TL_START;
           const step = () => {
             yearMin.value = TL_START;
@@ -420,10 +437,12 @@
             current += 1;
             if (current > TL_END) {
               stopTimelapse();
+              return;
             }
+            const delay = current < 1900 ? 80 : 140; // faster before 1900
+            tlTimer = setTimeout(step, delay);
           };
           step();
-          tlTimer = setInterval(step, 300);
         };
 
         tlBtn.addEventListener("click", () => {
@@ -436,7 +455,6 @@
         alert("Konnte die GeoJSON nicht laden. Details in der Konsole.");
       });
 
-    // Click popup
     map.on("singleclick", (evt) => {
       popup.setPosition(undefined);
       map.forEachFeatureAtPixel(evt.pixel, (feature) => {
