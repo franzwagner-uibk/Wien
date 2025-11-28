@@ -80,7 +80,7 @@ const map = new ol.Map({
     maxZoom: 19
   })
 });
-gemeindebauLayer.setZIndex(10);
+gemeindebauLayer.setZIndex(1000);
 
 document.querySelectorAll("input[name='basemap']").forEach((radio) => {
   radio.addEventListener("change", () => {
@@ -407,3 +407,4 @@ map.on("singleclick", (evt) => {
     return true;
   });
 });
+
