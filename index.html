@@ -56,6 +56,17 @@
       position: relative;
       height: 36px;
       flex: 1;
+      display: flex;
+      align-items: center;
+    }
+    .slider-track {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 6px;
+      background: #444;
+      border-radius: 4px;
+      z-index: 1;
     }
     .slider-row input[type="range"] {
       position: absolute;
@@ -67,17 +78,10 @@
       pointer-events: auto;
       -webkit-appearance: none;
       appearance: none;
+      z-index: 2;
     }
-    .slider-row input[type="range"]::-webkit-slider-runnable-track {
-      height: 6px;
-      background: #444;
-      border-radius: 4px;
-    }
-    .slider-row input[type="range"]::-moz-range-track {
-      height: 6px;
-      background: #444;
-      border-radius: 4px;
-    }
+    .slider-row input[type="range"]::-webkit-slider-runnable-track { height: 6px; background: transparent; }
+    .slider-row input[type="range"]::-moz-range-track { height: 6px; background: transparent; }
     .slider-row input[type="range"]::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
@@ -99,8 +103,8 @@
       position: relative;
       z-index: 3;
     }
-    #year-min { z-index: 3; top: 2px; }
-    #year-max { z-index: 2; top: 0; }
+    #year-min { z-index: 4; top: 2px; }
+    #year-max { z-index: 3; top: 0; }
     details.legend {
       margin-top: 10px;
       padding: 8px;
@@ -140,11 +144,7 @@
       flex-shrink: 0;
     }
     .timelapse-btn:hover { background: #f9a63f; }
-    .timeline {
-      display: none;
-      margin-top: 8px;
-      font-size: 12px;
-    }
+    .timeline { display: none; margin-top: 8px; font-size: 12px; }
     .timeline-bar {
       position: relative;
       height: 10px;
@@ -160,6 +160,7 @@
       background: #c0392b;
       transition: width 0.1s linear;
     }
+    .pie-wrap { margin-top: 8px; }
     .ol-popup {
       position: absolute;
       background: white;
@@ -205,11 +206,15 @@
       <div class="time-control">
         <button id="timelapse-btn" class="timelapse-btn"><span>▶</span><span class="tl-label">Timelapse</span></button>
         <div class="slider-row" id="year-slider-row">
+          <div class="slider-track"></div>
           <input id="year-min" type="range" min="1743" max="2025" value="1743">
           <input id="year-max" type="range" min="1743" max="2025" value="2025">
         </div>
       </div>
       <div id="wohnungs-count" style="font-size:12px; margin-top:4px;">Wohnungsanzahl: -</div>
+    </div>
+    <div class="pie-wrap">
+      <svg id="pie-svg" width="320" height="160" viewBox="0 0 320 160" aria-label="Wohnungsanzahl Übersicht"></svg>
     </div>
     <details class="legend" id="legend">
       <summary>Legende</summary>
@@ -232,12 +237,20 @@
 
     const categoryColors = {
       pre1919: "#7a0010",
-      zwischen: "#b00000",
+      zwischen: "#b00000",      // Rotes Wien
       wieder: "#f28e2b",
       gross: "#4e79a7",
       postmodern: "#9c6ade",
       modern: "#59a14f"
     };
+    const legendItems = [
+      { key: "pre1919", label: "Vor 1919", color: categoryColors.pre1919 },
+      { key: "zwischen", label: "Zwischenkriegszeit (1919–1934)", color: categoryColors.zwischen },
+      { key: "wieder", label: "Wiederaufbau (1945–1970)", color: categoryColors.wieder },
+      { key: "gross", label: "Großsiedlungen (1971–1980)", color: categoryColors.gross },
+      { key: "postmodern", label: "Postmoderne (1981–1999)", color: categoryColors.postmodern },
+      { key: "modern", label: "Gegenwart (2000–heute)", color: categoryColors.modern }
+    ];
 
     const vectorSource = new ol.source.Vector();
     const styleCache = {};
@@ -347,6 +360,57 @@
         yearMax.min = minYearBase; yearMax.max = maxYear; yearMax.value = maxYear;
         yearLabels.textContent = `(${yearMin.value} – ${yearMax.value})`;
 
+        const legendEl = document.getElementById("legend-content");
+        legendEl.innerHTML = legendItems.map(item =>
+          `<div class="legend-row"><span class="legend-swatch" style="background:${item.color};"></span><span>${item.label}</span></div>`
+        ).join("");
+        const pieSvg = document.getElementById("pie-svg");
+
+        const describeSlices = (slices, totalMax, cx, cy, r) => {
+          let start = -Math.PI / 2;
+          return slices.map((s) => {
+            const angle = (s.value / totalMax) * Math.PI * 2;
+            const end = start + angle;
+            const largeArc = angle > Math.PI ? 1 : 0;
+            const x1 = cx + r * Math.cos(start);
+            const y1 = cy + r * Math.sin(start);
+            const x2 = cx + r * Math.cos(end);
+            const y2 = cy + r * Math.sin(end);
+            const d = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+            start = end;
+            return `<path d="${d}" fill="${s.color}" stroke="#111" stroke-width="1" />`;
+          }).join("");
+        };
+
+        const updatePie = (filtered, sumWohn, totals) => {
+          const slices = legendItems.map((item) => ({
+            key: item.key,
+            color: item.color,
+            value: filtered
+              .filter((f) => {
+                const y = parseInt(f.get("BAUJAHR"), 10);
+                if (!Number.isFinite(y)) return false;
+                if (item.key === "pre1919") return y < 1919;
+                if (item.key === "zwischen") return y >= 1919 && y <= 1934;
+                if (item.key === "wieder") return y >= 1945 && y <= 1970;
+                if (item.key === "gross") return y >= 1971 && y <= 1980;
+                if (item.key === "postmodern") return y >= 1981 && y <= 1999;
+                if (item.key === "modern") return y >= 2000;
+                return false;
+              })
+              .reduce((acc, f) => acc + (parseInt(f.get("WOHNUNGSANZAHL"), 10) || 0), 0)
+          }));
+          const totalMax = totals.max || 1;
+          const r = 70;
+          const cx = 80;
+          const cy = 80;
+          pieSvg.innerHTML = describeSlices(slices, totalMax, cx, cy, r);
+          const needleAngle = Math.min(1, sumWohn / totalMax) * Math.PI * 2 - Math.PI / 2;
+          const nx = cx + r * Math.cos(needleAngle);
+          const ny = cy + r * Math.sin(needleAngle);
+          pieSvg.innerHTML += `<line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="#111" stroke-width="3" stroke-linecap="round" />`;
+        };
+
         const applyFilter = () => {
           let lo = parseInt(yearMin.value, 10);
           let hi = parseInt(yearMax.value, 10);
@@ -361,6 +425,7 @@
           vectorSource.addFeatures(filtered);
           const sumWohn = filtered.reduce((acc, f) => acc + (parseInt(f.get("WOHNUNGSANZAHL"), 10) || 0), 0);
           wohnCountEl.textContent = `Wohnungsanzahl: ${sumWohn.toLocaleString("de-DE")}`;
+          updatePie(filtered, sumWohn, allTotals);
         };
 
         yearMin.addEventListener("input", () => {
@@ -376,21 +441,25 @@
           applyFilter();
         });
 
+        const allTotals = allFeatures.reduce((acc, f) => {
+          const y = parseInt(f.get("BAUJAHR"), 10);
+          const w = parseInt(f.get("WOHNUNGSANZAHL"), 10) || 0;
+          let key = "unknown";
+          if (Number.isFinite(y)) {
+            if (y < 1919) key = "pre1919";
+            else if (y <= 1934) key = "zwischen";
+            else if (y >= 1945 && y <= 1970) key = "wieder";
+            else if (y >= 1971 && y <= 1980) key = "gross";
+            else if (y >= 1981 && y <= 1999) key = "postmodern";
+            else if (y >= 2000) key = "modern";
+          }
+          acc[key] = (acc[key] || 0) + w;
+          acc.max = (acc.max || 0) + w;
+          return acc;
+        }, {});
+
         vectorSource.addFeatures(allFeatures);
         applyFilter();
-
-        const legendEl = document.getElementById("legend-content");
-        const legendItems = [
-          { label: "Vor 1919", color: categoryColors.pre1919 },
-          { label: "Zwischenkriegszeit (1919–1934)", color: categoryColors.zwischen },
-          { label: "Wiederaufbau (1945–1970)", color: categoryColors.wieder },
-          { label: "Großsiedlungen (1971–1980)", color: categoryColors.gross },
-          { label: "Postmoderne (1981–1999)", color: categoryColors.postmodern },
-          { label: "Gegenwart (2000–heute)", color: categoryColors.modern }
-        ];
-        legendEl.innerHTML = legendItems.map(item =>
-          `<div class="legend-row"><span class="legend-swatch" style="background:${item.color};"></span><span>${item.label}</span></div>`
-        ).join("");
 
         const nameIndex = allFeatures
           .map((f) => ({
