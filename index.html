@@ -27,6 +27,7 @@
     .panel label { display: flex; align-items: center; gap: 6px; user-select: none; }
     .slider-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
     .slider-row input[type="range"] { flex: 1; }
+    .toggle-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .search-box { margin-top: 8px; }
     .search-input {
       width: 100%;
@@ -52,27 +53,22 @@
     }
     .suggestions-item { padding: 6px 8px; cursor: pointer; }
     .suggestions-item:hover { background: #f0f4ff; }
-    .legend {
+    details.legend {
       margin-top: 10px;
       padding: 8px;
       border: 1px solid #ddd;
       border-radius: 6px;
       background: rgba(255,255,255,0.95);
     }
-    .legend-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 12px;
-      margin: 3px 0;
+    details.legend summary {
+      font-weight: 600;
+      cursor: pointer;
+      outline: none;
+      list-style: none;
     }
-    .legend-swatch {
-      width: 22px;
-      height: 12px;
-      border: 1px solid #333;
-      border-radius: 3px;
-      flex-shrink: 0;
-    }
+    details.legend summary::-webkit-details-marker { display: none; }
+    .legend-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 3px 0; }
+    .legend-swatch { width: 22px; height: 12px; border: 1px solid #333; border-radius: 3px; flex-shrink: 0; }
     .ol-popup {
       position: absolute;
       background: white;
@@ -93,6 +89,10 @@
         width: calc(100% - 24px);
       }
     }
+    @media (max-width: 540px) {
+      .toggle-row { justify-content: center; }
+      details.legend { margin-top: 8px; }
+    }
   </style>
 </head>
 <body>
@@ -105,12 +105,10 @@
         <div id="hof-suggestions" class="suggestions-list" style="display:none;"></div>
       </div>
     </div>
-    <div style="margin-top:8px; margin-bottom:6px;">
-      <strong>Basemap:</strong>
-      <label style="margin-left:6px;"><input type="radio" name="basemap" value="bmap"> Topo</label>
-      <label style="margin-left:6px;"><input type="radio" name="basemap" value="ortho" checked> Orthofoto</label>
-    </div>
-    <div style="margin-bottom:6px;">
+    <div style="margin-top:8px; margin-bottom:6px;" class="toggle-row">
+      <div><strong>Basemap:</strong></div>
+      <label><input type="radio" name="basemap" value="bmap"> Topo</label>
+      <label><input type="radio" name="basemap" value="ortho" checked> Orthofoto</label>
       <label><input id="gemeindebau-toggle" type="checkbox" checked> Gemeindebau</label>
     </div>
     <div style="margin-top:4px;">
@@ -121,7 +119,10 @@
       </div>
       <div id="year-labels" style="font-size:12px; margin-top:2px;">1743 – 2025</div>
     </div>
-    <div class="legend" id="legend"></div>
+    <details class="legend" id="legend" open>
+      <summary>Legende</summary>
+      <div id="legend-content"></div>
+    </details>
   </div>
   <div id="map"></div>
 
@@ -149,7 +150,7 @@
           key = `d${idx}`;
         }
       }
-      const width = Math.max(1, Math.min(6, 0.5 + resolution / 20)); // thicker when zoomed out
+      const width = Math.max(1.6, Math.min(8, 0.7 + resolution / 16)); // ensure visibility when zoomed out
       const cacheKey = `${key}-${Math.round(width * 10)}`; // bucket by width
       if (!styleCache[cacheKey]) {
         let fillColor = "#cccccc";
@@ -266,7 +267,7 @@
         applyFilter();
 
         // Legend
-        const legendEl = document.getElementById("legend");
+        const legendEl = document.getElementById("legend-content");
         const legendItems = [
           { label: "< 1900", color: decadeColors[0] }
         ];
@@ -274,7 +275,7 @@
           const end = start + 9;
           legendItems.push({ label: `${start}-${end}`, color: decadeColors[i] || decadeColors[decadeColors.length - 1] });
         }
-        legendEl.innerHTML = `<div style="font-weight:600; margin-bottom:4px;">Legende</div>` + legendItems.map(item =>
+        legendEl.innerHTML = legendItems.map(item =>
           `<div class="legend-row"><span class="legend-swatch" style="background:${item.color};"></span><span>${item.label}</span></div>`
         ).join("");
 
