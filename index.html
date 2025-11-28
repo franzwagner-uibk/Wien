@@ -54,7 +54,8 @@
     .slider-row { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
     .slider-row input[type="range"] { width: 100%; }
     details.legend {
-      padding: 6px 8px;
+      margin-top: 10px;
+      padding: 8px;
       border: 1px solid #ddd;
       border-radius: 6px;
       background: #f5b342;
@@ -76,7 +77,7 @@
     details.legend[open] summary::before { content: "v"; }
     .legend-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 3px 0; }
     .legend-swatch { width: 22px; height: 12px; border: 1px solid #333; border-radius: 3px; flex-shrink: 0; }
-    .info-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+    .timelapse-row { display: flex; justify-content: flex-end; margin-top: 6px; }
     .timelapse-btn {
       padding: 8px 10px;
       border: none;
@@ -91,7 +92,22 @@
       gap: 6px;
     }
     .timelapse-btn:hover { background: #f9a63f; }
-    .timeline { display: none; }
+    .timeline { display: none; margin-top: 8px; font-size: 12px; }
+    .timeline-bar {
+      position: relative;
+      height: 10px;
+      background: rgba(0,0,0,0.15);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    .timeline-progress {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 0%;
+      background: #c0392b;
+      transition: width 0.1s linear;
+    }
     .ol-popup {
       position: absolute;
       background: white;
@@ -112,7 +128,6 @@
         width: calc(100% - 24px);
       }
       .toggle-row { justify-content: center; }
-      .info-row { flex-direction: column; align-items: flex-start; }
       details.legend { margin-top: 8px; }
       .timelapse-btn { padding: 8px; }
       .timelapse-btn .tl-label { display: none; }
@@ -124,7 +139,7 @@
     <h1>Suessmaus Karte Gemeindebau Wien</h1>
     <div class="search-box">
       <div style="position:relative;">
-        <input id="hof-search" class="search-input" type="text" placeholder="Suche (HOFNAME) - min. 3 Zeichen" autocomplete="off">
+        <input id="hof-search" class="search-input" type="text" placeholder="Suche (HOFNAME) – min. 3 Zeichen" autocomplete="off">
         <div id="hof-suggestions" class="suggestions-list" style="display:none;"></div>
       </div>
     </div>
@@ -135,19 +150,25 @@
       <label><input id="gemeindebau-toggle" type="checkbox" checked> Gemeindebau</label>
     </div>
     <div style="margin-top:4px;">
-      <div style="font-weight:600;">Baujahr filtern <span id="year-labels">(1743 - 2025)</span></div>
+      <div style="font-weight:600;">Baujahr filtern <span id="year-labels">(1743 – 2025)</span></div>
       <div class="slider-row">
         <input id="year-min" type="range" min="1743" max="2025" value="1743">
         <input id="year-max" type="range" min="1743" max="2025" value="2025">
       </div>
+      <div id="wohnungs-count" style="font-size:12px; margin-top:4px;">Wohnungsanzahl: -</div>
     </div>
-    <div class="info-row">
-      <details class="legend" id="legend">
-        <summary>Legende</summary>
-        <div id="legend-content"></div>
-      </details>
-      <div id="wohnungs-count" style="font-size:12px;">Wohnungsanzahl: -</div>
+    <details class="legend" id="legend">
+      <summary>Legende</summary>
+      <div id="legend-content"></div>
+    </details>
+    <div class="timelapse-row">
       <button id="timelapse-btn" class="timelapse-btn"><span>▶</span><span class="tl-label">Timelapse</span></button>
+    </div>
+    <div id="timeline" class="timeline">
+      <div style="font-weight:600;">Timeline <span id="timeline-year"></span></div>
+      <div class="timeline-bar">
+        <div id="timeline-progress" class="timeline-progress"></div>
+      </div>
     </div>
   </div>
   <div id="map"></div>
@@ -156,7 +177,7 @@
   <script>
     const targetProjection = ol.proj.get("EPSG:3857");
     const minYearBase = 1743;
-    const esriAttribution = "Tiles (c) Esri";
+    const esriAttribution = "Tiles © Esri";
 
     const categoryColors = {
       pre1919: "#7a0010",
@@ -168,11 +189,11 @@
     };
     const legendItems = [
       { key: "pre1919", label: "Vor 1919", color: categoryColors.pre1919 },
-      { key: "zwischen", label: "Zwischenkriegszeit (1919-1934)", color: categoryColors.zwischen },
-      { key: "wieder", label: "Wiederaufbau (1945-1970)", color: categoryColors.wieder },
-      { key: "gross", label: "Grosssiedlungen (1971-1980)", color: categoryColors.gross },
-      { key: "postmodern", label: "Postmoderne (1981-1999)", color: categoryColors.postmodern },
-      { key: "modern", label: "Gegenwart (2000-heute)", color: categoryColors.modern }
+      { key: "zwischen", label: "Zwischenkriegszeit (1919–1934)", color: categoryColors.zwischen },
+      { key: "wieder", label: "Wiederaufbau (1945–1970)", color: categoryColors.wieder },
+      { key: "gross", label: "Großsiedlungen (1971–1980)", color: categoryColors.gross },
+      { key: "postmodern", label: "Postmoderne (1981–1999)", color: categoryColors.postmodern },
+      { key: "modern", label: "Gegenwart (2000–heute)", color: categoryColors.modern }
     ];
 
     const vectorSource = new ol.source.Vector();
@@ -277,16 +298,16 @@
         const maxYear = Math.max(...years);
         const yearMin = document.getElementById("year-min");
         const yearMax = document.getElementById("year-max");
+        const yearLabels = document.getElementById("year-labels");
+        const wohnCountEl = document.getElementById("wohnungs-count");
         yearMin.min = minYearBase; yearMin.max = maxYear; yearMin.value = Math.max(minYearBase, minYear);
         yearMax.min = minYearBase; yearMax.max = maxYear; yearMax.value = maxYear;
-        yearLabels.textContent = `(${yearMin.value} - ${yearMax.value})`;
+        yearLabels.textContent = `(${yearMin.value} – ${yearMax.value})`;
 
         const legendEl = document.getElementById("legend-content");
         legendEl.innerHTML = legendItems.map(item =>
           `<div class="legend-row"><span class="legend-swatch" style="background:${item.color};"></span><span>${item.label}</span></div>`
         ).join("");
-
-        const wohnCountEl = document.getElementById("wohnungs-count");
 
         const applyFilter = () => {
           let lo = parseInt(yearMin.value, 10);
@@ -295,7 +316,7 @@
           if (hi < lo) hi = lo;
           yearMin.value = lo;
           yearMax.value = hi;
-          yearLabels.textContent = `(${lo} - ${hi})`;
+          yearLabels.textContent = `(${lo} – ${hi})`;
           const filtered = allFeatures.filter((f) => {
             const y = parseInt(f.get("BAUJAHR"), 10);
             return Number.isFinite(y) && y >= lo && y <= hi;
@@ -378,6 +399,9 @@
         });
 
         const tlBtn = document.getElementById("timelapse-btn");
+        const timeline = document.getElementById("timeline");
+        const tlYear = document.getElementById("timeline-year");
+        const tlProgress = document.getElementById("timeline-progress");
         let tlTimer = null;
         const TL_START = minYearBase;
         const TL_END = Math.min(2023, maxYear);
@@ -388,15 +412,20 @@
           if (tlTimer) clearTimeout(tlTimer);
           tlTimer = null;
           tlBtn.innerHTML = '<span>▶</span><span class="tl-label">Timelapse</span>';
+          timeline.style.display = "none";
         };
 
         const startTimelapse = () => {
+          timeline.style.display = "block";
           tlBtn.innerHTML = '<span>⏸</span><span class="tl-label">Stop</span>';
           let current = TL_START;
           const step = () => {
             yearMin.value = TL_START;
             yearMax.value = current;
             applyFilter();
+            const pct = ((current - TL_START) / (TL_END - TL_START)) * 100;
+            tlProgress.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+            tlYear.textContent = current;
             current += 1;
             if (current > TL_END) {
               stopTimelapse();
