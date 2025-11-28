@@ -41,74 +41,58 @@
   </div>
   <div id="map"></div>
 
-  <script type="module">
-    import Map from "https://cdn.jsdelivr.net/npm/ol@latest/Map.js";
-    import View from "https://cdn.jsdelivr.net/npm/ol@latest/View.js";
-    import TileLayer from "https://cdn.jsdelivr.net/npm/ol@latest/layer/Tile.js";
-    import VectorLayer from "https://cdn.jsdelivr.net/npm/ol@latest/layer/Vector.js";
-    import WMTS, { optionsFromCapabilities } from "https://cdn.jsdelivr.net/npm/ol@latest/source/WMTS.js";
-    import VectorSource from "https://cdn.jsdelivr.net/npm/ol@latest/source/Vector.js";
-    import WMTSCapabilities from "https://cdn.jsdelivr.net/npm/ol@latest/format/WMTSCapabilities.js";
-    import GeoJSON from "https://cdn.jsdelivr.net/npm/ol@latest/format/GeoJSON.js";
-    import { fromLonLat, get as getProjection } from "https://cdn.jsdelivr.net/npm/ol@latest/proj.js";
-    import { register } from "https://cdn.jsdelivr.net/npm/ol@latest/proj/proj4.js";
-    import proj4 from "https://cdn.jsdelivr.net/npm/proj4@2.9.1/+esm";
-    import Style from "https://cdn.jsdelivr.net/npm/ol@latest/style/Style.js";
-    import Fill from "https://cdn.jsdelivr.net/npm/ol@latest/style/Fill.js";
-    import Stroke from "https://cdn.jsdelivr.net/npm/ol@latest/style/Stroke.js";
-
+  <!-- Use prebuilt OpenLayers bundle (avoids bare-specifier issues) -->
+  <script src="https://cdn.jsdelivr.net/npm/proj4@2.9.1/dist/proj4.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.js"></script>
+  <script>
     const wmtsUrl = "https://mapsneu.wien.gv.at/basemap31256neu/1.0.0/WMTSCapabilities.xml";
     const wfsUrl = "https://data.wien.gv.at/daten/geo";
     const targetProjectionCode = "EPSG:31256";
 
-    // Register EPSG:31256 so OpenLayers can reproject and match the WMTS/WFS
+    // Register EPSG:31256 for OL (Bessel + towgs84)
     proj4.defs(
       targetProjectionCode,
       "+proj=tmerc +lat_0=0 +lon_0=16 +k=1 +x_0=0 +y_0=-5000000 +ellps=bessel " +
         "+towgs84=577.326,90.129,463.919,5.137,1.474,5.297,2.4232 +units=m +no_defs"
     );
-    register(proj4);
-    const targetProjection = getProjection(targetProjectionCode);
+    ol.proj.proj4.register(proj4);
+    const targetProjection = ol.proj.get(targetProjectionCode);
 
     async function buildMap() {
       // Parse WMTS capabilities for basemap.at (EPSG:31256)
       const wmtsResponse = await fetch(wmtsUrl);
-      if (!wmtsResponse.ok) {
-        throw new Error(`WMTS capabilities request failed (${wmtsResponse.status})`);
-      }
+      if (!wmtsResponse.ok) throw new Error(`WMTS capabilities request failed (${wmtsResponse.status})`);
       const capabilitiesText = await wmtsResponse.text();
-      const capabilities = new WMTSCapabilities().read(capabilitiesText);
-      const wmtsOptions = optionsFromCapabilities(capabilities, {
+      const capabilities = new ol.format.WMTSCapabilities().read(capabilitiesText);
+      const wmtsOptions = ol.source.WMTS.optionsFromCapabilities(capabilities, {
         layer: "bmap",
         matrixSet: "31256",
         style: "farbe"
       });
 
-      const basemap = new TileLayer({
-        source: new WMTS(wmtsOptions)
+      const basemap = new ol.layer.Tile({
+        source: new ol.source.WMTS(wmtsOptions)
       });
 
-      const gemeindebauSource = new VectorSource({
-        format: new GeoJSON(),
-        url: `${wfsUrl}?service=WFS&version=1.1.0&request=GetFeature&typeName=${encodeURIComponent(
-          "ogdwien:GEMBAUTENFLOGD"
-        )}&srsName=${encodeURIComponent(targetProjectionCode)}&outputFormat=application/json`
-      });
-
-      const gemeindebauLayer = new VectorLayer({
-        source: gemeindebauSource,
-        style: new Style({
-          stroke: new Stroke({ color: "#c0392b", width: 1.4 }),
-          fill: new Fill({ color: "rgba(192,57,43,0.25)" })
+      const gemeindebauLayer = new ol.layer.Vector({
+        source: new ol.source.Vector({
+          format: new ol.format.GeoJSON(),
+          url: `${wfsUrl}?service=WFS&version=1.1.0&request=GetFeature&typeName=${encodeURIComponent(
+            "ogdwien:GEMBAUTENFLOGD"
+          )}&srsName=${encodeURIComponent(targetProjectionCode)}&outputFormat=application/json`
+        }),
+        style: new ol.style.Style({
+          stroke: new ol.style.Stroke({ color: "#c0392b", width: 1.4 }),
+          fill: new ol.style.Fill({ color: "rgba(192,57,43,0.25)" })
         })
       });
 
-      const map = new Map({
+      const map = new ol.Map({
         target: "map",
         layers: [basemap, gemeindebauLayer],
-        view: new View({
+        view: new ol.View({
           projection: targetProjection,
-          center: fromLonLat([16.3738, 48.2082], targetProjection), // Vienna center in EPSG:31256
+          center: ol.proj.fromLonLat([16.3738, 48.2082], targetProjection), // Vienna center
           zoom: 12,
           minZoom: 4,
           maxZoom: 18
@@ -124,7 +108,7 @@
 
     buildMap().catch((err) => {
       console.error("Map setup failed:", err);
-      alert("Map setup failed. Please check the console for details.");
+      alert("Map setup failed. See console for details.");
     });
   </script>
 </body>
