@@ -172,6 +172,8 @@
     const targetProjection = ol.proj.get("EPSG:3857");
     const minYearBase = 1743;
     const esriAttribution = "Tiles © Esri";
+    const stephansplatzCenter = ol.proj.fromLonLat([16.3725, 48.2086], targetProjection);
+    const stephansplatzZoom = 13.4; // ~1:50.000
 
     const categoryColors = {
       pre1919: "#7a0010",
@@ -245,8 +247,8 @@
       layers: [baseLayerBmap, baseLayerOrtho, gemeindebauLayer],
       view: new ol.View({
         projection: targetProjection,
-        center: ol.proj.fromLonLat([16.3738, 48.2082], targetProjection),
-        zoom: 13,
+        center: stephansplatzCenter,
+        zoom: stephansplatzZoom,
         minZoom: 4,
         maxZoom: 19
       })
@@ -286,16 +288,6 @@
           dataProjection: "EPSG:4326",
           featureProjection: targetProjection
         });
-        const fullExtent = ol.extent.createEmpty();
-        allFeatures.forEach((f) => {
-          const geom = f.getGeometry();
-          if (geom) ol.extent.extend(fullExtent, geom.getExtent());
-        });
-        const fitToFullExtent = () => {
-          if (!ol.extent.isEmpty(fullExtent)) {
-            map.getView().fit(fullExtent, { padding: [30, 30, 30, 30] });
-          }
-        };
 
         const years = allFeatures
           .map((f) => parseInt(f.get("BAUJAHR"), 10))
@@ -315,6 +307,10 @@
         legendEl.innerHTML = legendItems.map(item =>
           `<div class="legend-row"><span class="legend-swatch" style="background:${item.color};"></span><span>${item.label}</span></div>`
         ).join("");
+
+        const focusStephansplatz = () => {
+          map.getView().animate({ center: stephansplatzCenter, zoom: stephansplatzZoom, duration: 250 });
+        };
 
         const renderLegendChart = (counts, total) => {
           legendChartEl.innerHTML = legendItems.map((item) => {
@@ -366,7 +362,7 @@
 
         vectorSource.addFeatures(allFeatures);
         applyFilter();
-        fitToFullExtent();
+        focusStephansplatz();
 
         const nameIndex = allFeatures
           .map((f) => ({
@@ -448,7 +444,7 @@
 
         const startTimelapse = () => {
           tlBtn.innerHTML = '<span>⏸</span><span class="tl-label">Stop</span>';
-          fitToFullExtent();
+          focusStephansplatz();
           let current = TL_START;
           const step = () => {
             yearMin.value = TL_START;
@@ -494,6 +490,8 @@
   </script>
 </body>
 </html>
+
+
 
 
 
