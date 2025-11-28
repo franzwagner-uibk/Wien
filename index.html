@@ -13,7 +13,7 @@
       top: 12px;
       right: 12px;
       z-index: 1000;
-      background: rgba(255, 255, 255, 0.95);
+      background: #f5b342;
       padding: 10px 12px;
       border-radius: 10px;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
@@ -58,7 +58,7 @@
       padding: 8px;
       border: 1px solid #ddd;
       border-radius: 6px;
-      background: rgba(255,255,255,0.95);
+      background: #f5b342;
     }
     details.legend summary {
       font-weight: 600;
@@ -104,9 +104,8 @@
   <div class="panel">
     <h1>Suessmaus Karte Gemeindebau Wien</h1>
     <div class="search-box">
-      <div style="font-weight:600;">Suche (HOFNAME)</div>
       <div style="position:relative;">
-        <input id="hof-search" class="search-input" type="text" placeholder="Tippe min. 3 Zeichen..." autocomplete="off">
+        <input id="hof-search" class="search-input" type="text" placeholder="Suche (HOFNAME) – min. 3 Zeichen" autocomplete="off">
         <div id="hof-suggestions" class="suggestions-list" style="display:none;"></div>
       </div>
     </div>
@@ -117,12 +116,11 @@
       <label><input id="gemeindebau-toggle" type="checkbox" checked> Gemeindebau</label>
     </div>
     <div style="margin-top:4px;">
-      <div style="font-weight:600;">Baujahr filtern</div>
-      <div class="slider-row">
+      <div style="font-weight:600;">Baujahr filtern <span id="year-labels">(1743 – 2025)</span></div>
+      <div class="slider-row" id="year-slider-row">
         <input id="year-min" type="range" min="1743" max="2025" value="1743">
         <input id="year-max" type="range" min="1743" max="2025" value="2025">
       </div>
-      <div id="year-labels" style="font-size:12px; margin-top:2px;">1743 – 2025</div>
     </div>
     <details class="legend" id="legend">
       <summary>Legende</summary>
@@ -254,12 +252,12 @@
         const yearLabels = document.getElementById("year-labels");
         yearMin.min = minYearBase; yearMin.max = maxYear; yearMin.value = Math.max(minYearBase, minYear);
         yearMax.min = minYearBase; yearMax.max = maxYear; yearMax.value = maxYear;
-        yearLabels.textContent = `${yearMin.value} – ${yearMax.value}`;
+        yearLabels.textContent = `(${yearMin.value} – ${yearMax.value})`;
 
         const applyFilter = () => {
           const lo = Math.min(parseInt(yearMin.value, 10), parseInt(yearMax.value, 10));
           const hi = Math.max(parseInt(yearMin.value, 10), parseInt(yearMax.value, 10));
-          yearLabels.textContent = `${lo} – ${hi}`;
+          yearLabels.textContent = `(${lo} – ${hi})`;
           const filtered = allFeatures.filter((f) => {
             const y = parseInt(f.get("BAUJAHR"), 10);
             return Number.isFinite(y) && y >= lo && y <= hi;
