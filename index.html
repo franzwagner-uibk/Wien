@@ -59,10 +59,10 @@
     <div style="margin-top:4px;">
       <div style="font-weight:600;">Baujahr filtern</div>
       <div class="slider-row">
-        <input id="year-min" type="range" min="1900" max="2025" value="1900">
-        <input id="year-max" type="range" min="1900" max="2025" value="2025">
+        <input id="year-min" type="range" min="1743" max="2025" value="1743">
+        <input id="year-max" type="range" min="1743" max="2025" value="2025">
       </div>
-      <div id="year-labels" style="font-size:12px; margin-top:2px;">1900 – 2025</div>
+      <div id="year-labels" style="font-size:12px; margin-top:2px;">1743 – 2025</div>
     </div>
   </div>
   <div id="map"></div>
@@ -70,132 +70,173 @@
   <script src="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.js"></script>
   <script>
     const targetProjection = ol.proj.get("EPSG:3857");
-    const esriAttribution = 'Tiles © Esri — Sources: Esri, Garmin, GEBCO, NOAA NGDC, and other contributors';
+    const minYearBase = 1743;
+
+    async function createBasemapSources() {
+      const capsUrl = "https://maps.wien.gv.at/basemap/1.0.0/WMTSCapabilities.xml";
+      const text = await (await fetch(capsUrl)).text();
+      const caps = new ol.format.WMTSCapabilities().read(text);
+      const bmapOptions = ol.source.WMTS.optionsFromCapabilities(caps, {
+        layer: "geolandbasemap",
+        matrixSet: "google3857",
+        style: "normal"
+      });
+      const orthoOptions = ol.source.WMTS.optionsFromCapabilities(caps, {
+        layer: "bmaporthofoto30cm",
+        matrixSet: "google3857",
+        style: "normal"
+      });
+      return {
+        bmap: new ol.source.WMTS({ ...bmapOptions, crossOrigin: "anonymous" }),
+        ortho: new ol.source.WMTS({ ...orthoOptions, crossOrigin: "anonymous" })
+      };
+    }
 
     const vectorSource = new ol.source.Vector();
+    const decadeColors = [
+      "#7a0177", // <1900
+      "#f7fcf0", "#e0f3db", "#ccebc5", "#a8ddb5", "#7bccc4",
+      "#4eb3d3", "#2b8cbe", "#0868ac", "#084081", "#fc8d59",
+      "#ef6548", "#d7301f", "#b30000", "#7f0000", "#49006a"
+    ];
+    const styleCache = {};
+    const stroke = new ol.style.Stroke({ color: "#333", width: 1 });
+    function styleByYear(feature) {
+      const y = parseInt(feature.get("BAUJAHR"), 10);
+      let key = "unknown";
+      if (Number.isFinite(y)) {
+        if (y < 1900) key = "<1900";
+        else {
+          const idx = Math.floor((y - 1900) / 10);
+          key = `d${idx}`;
+        }
+      }
+      if (!styleCache[key]) {
+        let fillColor = "#cccccc";
+        if (key === "<1900") fillColor = decadeColors[0];
+        else if (key.startsWith("d")) {
+          const idx = Math.min(decadeColors.length - 2, parseInt(key.slice(1), 10));
+          fillColor = decadeColors[1 + idx] || decadeColors[decadeColors.length - 1];
+        }
+        styleCache[key] = new ol.style.Style({
+          stroke,
+          fill: new ol.style.Fill({ color: fillColor + "cc" }) // slight transparency
+        });
+      }
+      return styleCache[key];
+    }
     const gemeindebauLayer = new ol.layer.Vector({
       source: vectorSource,
-      style: new ol.style.Style({
-        stroke: new ol.style.Stroke({ color: "#c0392b", width: 1.4 }),
-        fill: new ol.style.Fill({ color: "rgba(192,57,43,0.25)" })
-      })
+      style: styleByYear
     });
 
-    const baseLayerStreet = new ol.layer.Tile({
-      source: new ol.source.XYZ({
-        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-        attributions: esriAttribution,
-        crossOrigin: "anonymous",
-        maxZoom: 19
-      })
-    });
-    const baseLayerOrtho = new ol.layer.Tile({
-      source: new ol.source.XYZ({
-        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        attributions: esriAttribution,
-        crossOrigin: "anonymous",
-        maxZoom: 19
-      }),
-      visible: false
-    });
+    createBasemapSources()
+      .then(({ bmap, ortho }) => {
+        const baseLayerBmap = new ol.layer.Tile({ source: bmap });
+        const baseLayerOrtho = new ol.layer.Tile({ source: ortho, visible: false });
 
-    const map = new ol.Map({
-      target: "map",
-      layers: [baseLayerStreet, baseLayerOrtho, gemeindebauLayer],
-      view: new ol.View({
-        projection: targetProjection,
-        center: ol.proj.fromLonLat([16.3738, 48.2082], targetProjection),
-        zoom: 12,
-        minZoom: 4,
-        maxZoom: 19
-      })
-    });
-
-    // Basemap toggle
-    document.querySelectorAll("input[name='basemap']").forEach((radio) => {
-      radio.addEventListener("change", () => {
-        const val = document.querySelector("input[name='basemap']:checked").value;
-        baseLayerStreet.setVisible(val === "bmap");
-        baseLayerOrtho.setVisible(val === "ortho");
-      });
-    });
-    document.getElementById("gemeindebau-toggle").addEventListener("change", (e) => {
-      gemeindebauLayer.setVisible(e.target.checked);
-    });
-
-    // Popup overlay
-    const popupEl = document.createElement("div");
-    popupEl.className = "ol-popup";
-    const popup = new ol.Overlay({
-      element: popupEl,
-      autoPan: { animation: { duration: 200 } }
-    });
-    map.addOverlay(popup);
-
-    // Load local GeoJSON and set up filtering
-    fetch("GEMBAUTENFLOGD.json")
-      .then((r) => {
-        if (!r.ok) throw new Error(`GeoJSON load failed (${r.status})`);
-        return r.json();
-      })
-      .then((data) => {
-        const format = new ol.format.GeoJSON();
-        const allFeatures = format.readFeatures(data, {
-          dataProjection: "EPSG:4326",
-          featureProjection: targetProjection
+        const map = new ol.Map({
+          target: "map",
+          layers: [baseLayerBmap, baseLayerOrtho, gemeindebauLayer],
+          view: new ol.View({
+            projection: targetProjection,
+            center: ol.proj.fromLonLat([16.3738, 48.2082], targetProjection),
+            zoom: 12,
+            minZoom: 4,
+            maxZoom: 19
+          })
         });
 
-        const years = allFeatures
-          .map((f) => parseInt(f.get("BAUJAHR"), 10))
-          .filter((n) => Number.isFinite(n));
-        const minYear = Math.min(...years);
-        const maxYear = Math.max(...years);
-        const yearMin = document.getElementById("year-min");
-        const yearMax = document.getElementById("year-max");
-        const yearLabels = document.getElementById("year-labels");
-        yearMin.min = minYear; yearMin.max = maxYear; yearMin.value = minYear;
-        yearMax.min = minYear; yearMax.max = maxYear; yearMax.value = maxYear;
-        yearLabels.textContent = `${minYear} – ${maxYear}`;
-
-        const applyFilter = () => {
-          const lo = Math.min(parseInt(yearMin.value, 10), parseInt(yearMax.value, 10));
-          const hi = Math.max(parseInt(yearMin.value, 10), parseInt(yearMax.value, 10));
-          yearLabels.textContent = `${lo} – ${hi}`;
-          const filtered = allFeatures.filter((f) => {
-            const y = parseInt(f.get("BAUJAHR"), 10);
-            return Number.isFinite(y) && y >= lo && y <= hi;
+        // Basemap toggle
+        document.querySelectorAll("input[name='basemap']").forEach((radio) => {
+          radio.addEventListener("change", () => {
+            const val = document.querySelector("input[name='basemap']:checked").value;
+            baseLayerBmap.setVisible(val === "bmap");
+            baseLayerOrtho.setVisible(val === "ortho");
           });
-          vectorSource.clear(true);
-          vectorSource.addFeatures(filtered);
-        };
-        yearMin.addEventListener("input", applyFilter);
-        yearMax.addEventListener("input", applyFilter);
+        });
+        document.getElementById("gemeindebau-toggle").addEventListener("change", (e) => {
+          gemeindebauLayer.setVisible(e.target.checked);
+        });
 
-        vectorSource.addFeatures(allFeatures);
-        applyFilter();
+        // Popup overlay
+        const popupEl = document.createElement("div");
+        popupEl.className = "ol-popup";
+        const popup = new ol.Overlay({
+          element: popupEl,
+          autoPan: { animation: { duration: 200 } }
+        });
+        map.addOverlay(popup);
+
+        // Load local GeoJSON and set up filtering
+        fetch("GEMBAUTENFLOGD.json")
+          .then((r) => {
+            if (!r.ok) throw new Error(`GeoJSON load failed (${r.status})`);
+            return r.json();
+          })
+          .then((data) => {
+            const format = new ol.format.GeoJSON();
+            const allFeatures = format.readFeatures(data, {
+              dataProjection: "EPSG:4326",
+              featureProjection: targetProjection
+            });
+
+            const years = allFeatures
+              .map((f) => parseInt(f.get("BAUJAHR"), 10))
+              .filter((n) => Number.isFinite(n));
+            const minYear = Math.min(...years, minYearBase);
+            const maxYear = Math.max(...years);
+            const yearMin = document.getElementById("year-min");
+            const yearMax = document.getElementById("year-max");
+            const yearLabels = document.getElementById("year-labels");
+            yearMin.min = minYearBase; yearMin.max = maxYear; yearMin.value = Math.max(minYearBase, minYear);
+            yearMax.min = minYearBase; yearMax.max = maxYear; yearMax.value = maxYear;
+            yearLabels.textContent = `${yearMin.value} – ${yearMax.value}`;
+
+            const applyFilter = () => {
+              const lo = Math.min(parseInt(yearMin.value, 10), parseInt(yearMax.value, 10));
+              const hi = Math.max(parseInt(yearMin.value, 10), parseInt(yearMax.value, 10));
+              yearLabels.textContent = `${lo} – ${hi}`;
+              const filtered = allFeatures.filter((f) => {
+                const y = parseInt(f.get("BAUJAHR"), 10);
+                return Number.isFinite(y) && y >= lo && y <= hi;
+              });
+              vectorSource.clear(true);
+              vectorSource.addFeatures(filtered);
+            };
+            yearMin.addEventListener("input", applyFilter);
+            yearMax.addEventListener("input", applyFilter);
+
+            vectorSource.addFeatures(allFeatures);
+            applyFilter();
+          })
+          .catch((err) => {
+            console.error(err);
+            alert("Konnte die GeoJSON nicht laden. Details in der Konsole.");
+          });
+
+        // Click popup
+        map.on("singleclick", (evt) => {
+          popup.setPosition(undefined);
+          map.forEachFeatureAtPixel(evt.pixel, (feature) => {
+            const p = feature.getProperties();
+            popupEl.innerHTML = `
+              <div style="font-weight:700;margin-bottom:4px;">${p.HOFNAME || "Gemeindebau"}</div>
+              <div><strong>Baujahr:</strong> ${p.BAUJAHR || "-"}</div>
+              <div><strong>Adresse:</strong> ${p.ADRESSE || "-"}</div>
+              <div><strong>Wohnungsanzahl:</strong> ${p.WOHNUNGSANZAHL ?? "-"}</div>
+              <div><strong>Bezirk:</strong> ${p.BEZIRK ?? "-"}</div>
+              <div><a href="${p.PDFLINK || "#"}" target="_blank" rel="noopener">PDF</a></div>
+            `;
+            popup.setPosition(evt.coordinate);
+            return true;
+          });
+        });
       })
       .catch((err) => {
         console.error(err);
-        alert("Konnte die GeoJSON nicht laden. Details in der Konsole.");
+        alert("Basemap konnte nicht geladen werden. Details in der Konsole.");
       });
-
-    // Click popup
-    map.on("singleclick", (evt) => {
-      popup.setPosition(undefined);
-      map.forEachFeatureAtPixel(evt.pixel, (feature) => {
-        const p = feature.getProperties();
-        popupEl.innerHTML = `
-          <div style="font-weight:700;margin-bottom:4px;">${p.HOFNAME || "Gemeindebau"}</div>
-          <div><strong>Baujahr:</strong> ${p.BAUJAHR || "-"}</div>
-          <div><strong>Adresse:</strong> ${p.ADRESSE || "-"}</div>
-          <div><strong>Wohnungsanzahl:</strong> ${p.WOHNUNGSANZAHL ?? "-"}</div>
-          <div><strong>Bezirk:</strong> ${p.BEZIRK ?? "-"}</div>
-          <div><a href="${p.PDFLINK || "#"}" target="_blank" rel="noopener">PDF</a></div>
-        `;
-        popup.setPosition(evt.coordinate);
-        return true;
-      });
-    });
   </script>
 </body>
 </html>
