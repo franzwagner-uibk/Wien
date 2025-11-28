@@ -76,10 +76,13 @@
 
       const gemeindebauLayer = new ol.layer.Vector({
         source: new ol.source.Vector({
-          format: new ol.format.GeoJSON(),
+          format: new ol.format.GeoJSON({
+            dataProjection: targetProjectionCode,
+            featureProjection: targetProjectionCode
+          }),
           url: `${wfsUrl}?service=WFS&version=1.1.0&request=GetFeature&typeName=${encodeURIComponent(
             "ogdwien:GEMBAUTENFLOGD"
-          )}&srsName=${encodeURIComponent(targetProjectionCode)}&outputFormat=application/json`
+          )}&srsName=${encodeURIComponent("urn:ogc:def:crs:EPSG::31256")}&outputFormat=application/json`
         }),
         style: new ol.style.Style({
           stroke: new ol.style.Stroke({ color: "#c0392b", width: 1.4 }),
