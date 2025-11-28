@@ -165,7 +165,7 @@
           fillColor = decadeColors[1 + idx] || decadeColors[decadeColors.length - 1];
         }
         styleCache[cacheKey] = new ol.style.Style({
-          stroke: new ol.style.Stroke({ color: "#333", width }),
+          stroke: new ol.style.Stroke({ color: fillColor, width }),
           fill: new ol.style.Fill({ color: fillColor + "cc" })
         });
       }
