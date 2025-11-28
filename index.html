@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Süßmaus Karte Gemeindebau Wien</title>
+  <title>Suessmaus Karte Gemeindebau Wien</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/ol.css">
   <style>
     html, body { margin: 0; height: 100%; }
@@ -65,6 +65,39 @@
       margin: 0;
       background: transparent;
       pointer-events: auto;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .slider-row input[type="range"]::-webkit-slider-runnable-track {
+      height: 6px;
+      background: #444;
+      border-radius: 4px;
+    }
+    .slider-row input[type="range"]::-moz-range-track {
+      height: 6px;
+      background: #444;
+      border-radius: 4px;
+    }
+    .slider-row input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      background: #f7941d;
+      border: 2px solid #111;
+      border-radius: 50%;
+      margin-top: -5px;
+      position: relative;
+      z-index: 3;
+    }
+    .slider-row input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      background: #f7941d;
+      border: 2px solid #111;
+      border-radius: 50%;
+      position: relative;
+      z-index: 3;
     }
     #year-min { z-index: 3; top: 2px; }
     #year-max { z-index: 2; top: 0; }
@@ -154,7 +187,7 @@
 </head>
 <body>
   <div class="panel">
-    <h1>Süßmaus Karte Gemeindebau Wien</h1>
+    <h1>Suessmaus Karte Gemeindebau Wien</h1>
     <div class="search-box">
       <div style="position:relative;">
         <input id="hof-search" class="search-input" type="text" placeholder="Suche (HOFNAME) – min. 3 Zeichen" autocomplete="off">
@@ -197,33 +230,32 @@
     const minYearBase = 1743;
     const esriAttribution = "Tiles © Esri";
 
+    const categoryColors = {
+      pre1919: "#7a0010",
+      zwischen: "#b00000",
+      wieder: "#f28e2b",
+      gross: "#4e79a7",
+      postmodern: "#9c6ade",
+      modern: "#59a14f"
+    };
+
     const vectorSource = new ol.source.Vector();
-    const decadeColors = [
-      "#7a0177", // <1900
-      "#f7fcf0", "#e0f3db", "#ccebc5", "#a8ddb5", "#7bccc4",
-      "#4eb3d3", "#2b8cbe", "#0868ac", "#084081", "#fc8d59",
-      "#ef6548", "#d7301f", "#b30000", "#7f0000", "#49006a"
-    ];
     const styleCache = {};
     function styleByYear(feature, resolution) {
       const y = parseInt(feature.get("BAUJAHR"), 10);
       let key = "unknown";
       if (Number.isFinite(y)) {
-        if (y < 1900) key = "<1900";
-        else {
-          const idx = Math.floor((y - 1900) / 10);
-          key = `d${idx}`;
-        }
+        if (y < 1919) key = "pre1919";
+        else if (y <= 1934) key = "zwischen";
+        else if (y >= 1945 && y <= 1970) key = "wieder";
+        else if (y >= 1971 && y <= 1980) key = "gross";
+        else if (y >= 1981 && y <= 1999) key = "postmodern";
+        else if (y >= 2000) key = "modern";
       }
       const width = Math.max(2.2, Math.min(9, 1.2 + resolution / 12));
       const cacheKey = `${key}-${Math.round(width * 10)}`;
       if (!styleCache[cacheKey]) {
-        let fillColor = "#cccccc";
-        if (key === "<1900") fillColor = decadeColors[0];
-        else if (key.startsWith("d")) {
-          const idx = Math.min(decadeColors.length - 2, parseInt(key.slice(1), 10));
-          fillColor = decadeColors[1 + idx] || decadeColors[decadeColors.length - 1];
-        }
+        const fillColor = categoryColors[key] || "#cccccc";
         styleCache[cacheKey] = new ol.style.Style({
           stroke: new ol.style.Stroke({ color: fillColor, width }),
           fill: new ol.style.Fill({ color: fillColor + "cc" })
@@ -278,6 +310,7 @@
     document.getElementById("gemeindebau-toggle").addEventListener("change", (e) => {
       gemeindebauLayer.setVisible(e.target.checked);
     });
+
     const searchInput = document.getElementById("hof-search");
     const suggestionsBox = document.getElementById("hof-suggestions");
 
@@ -329,6 +362,7 @@
           const sumWohn = filtered.reduce((acc, f) => acc + (parseInt(f.get("WOHNUNGSANZAHL"), 10) || 0), 0);
           wohnCountEl.textContent = `Wohnungsanzahl: ${sumWohn.toLocaleString("de-DE")}`;
         };
+
         yearMin.addEventListener("input", () => {
           if (parseInt(yearMin.value, 10) > parseInt(yearMax.value, 10)) {
             yearMax.value = yearMin.value;
@@ -347,12 +381,13 @@
 
         const legendEl = document.getElementById("legend-content");
         const legendItems = [
-          { label: "< 1900", color: decadeColors[0] }
+          { label: "Vor 1919", color: categoryColors.pre1919 },
+          { label: "Zwischenkriegszeit (1919–1934)", color: categoryColors.zwischen },
+          { label: "Wiederaufbau (1945–1970)", color: categoryColors.wieder },
+          { label: "Großsiedlungen (1971–1980)", color: categoryColors.gross },
+          { label: "Postmoderne (1981–1999)", color: categoryColors.postmodern },
+          { label: "Gegenwart (2000–heute)", color: categoryColors.modern }
         ];
-        for (let start = 1900, i = 1; start <= 2020 && i < decadeColors.length; start += 10, i += 1) {
-          const end = start + 9;
-          legendItems.push({ label: `${start}-${end}`, color: decadeColors[i] || decadeColors[decadeColors.length - 1] });
-        }
         legendEl.innerHTML = legendItems.map(item =>
           `<div class="legend-row"><span class="legend-swatch" style="background:${item.color};"></span><span>${item.label}</span></div>`
         ).join("");
@@ -429,8 +464,8 @@
         let tlTimer = null;
         const TL_START = minYearBase;
         const TL_END = Math.min(2023, maxYear);
-        const FAST_DELAY = 60;   // ms before 1900
-        const SLOW_DELAY = 170;  // ms from 1900 onward
+        const FAST_DELAY = 60;
+        const SLOW_DELAY = 170;
 
         const stopTimelapse = () => {
           if (tlTimer) clearTimeout(tlTimer);
