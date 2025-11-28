@@ -3,28 +3,41 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Suessmaus Karte Gemeindebau Wien</title>
+  <title>S&uuml;&szlig;maus Karte Gemeindebau Wien</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/ol.css">
   <style>
     html, body { margin: 0; height: 100%; }
     #map { width: 100%; height: 100%; }
     .panel {
       position: absolute;
-      top: 10px;
-      right: 10px;
+      top: 12px;
+      right: 12px;
       z-index: 1000;
       background: #f5b342;
-      padding: 8px 10px;
+      padding: 10px 12px;
       border-radius: 10px;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
       font-size: 14px;
       line-height: 1.4;
-      width: 320px;
-      max-width: calc(100% - 20px);
+      width: 340px;
+      max-width: calc(100% - 24px);
     }
     .panel h1 { margin: 0 0 6px; font-size: 16px; font-weight: 700; }
     .panel label { display: flex; align-items: center; gap: 6px; user-select: none; }
+    .slider-row {
+      position: relative;
+      height: 36px;
+      margin-top: 4px;
+    }
+    .slider-row input[type="range"] {
+      position: absolute;
+      left: 0;
+      right: 0;
+      width: 100%;
+      margin: 0;
+      background: transparent;
+    }
     .toggle-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .search-box { margin-top: 8px; }
     .search-input {
@@ -51,35 +64,6 @@
     }
     .suggestions-item { padding: 6px 8px; cursor: pointer; }
     .suggestions-item:hover { background: #f0f4ff; }
-    .time-control { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
-    .slider-container {
-      position: relative;
-      height: 36px;
-      flex: 1;
-    }
-    .slider-track {
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: 14px;
-      height: 6px;
-      background: #444;
-      border-radius: 4px;
-    }
-    .thumb {
-      position: absolute;
-      top: 8px;
-      width: 16px;
-      height: 16px;
-      margin-left: -8px;
-      background: #f7941d;
-      border: 2px solid #111;
-      border-radius: 50%;
-      cursor: pointer;
-      z-index: 3;
-      touch-action: none;
-    }
-    .thumb.max { z-index: 4; }
     details.legend {
       margin-top: 10px;
       padding: 8px;
@@ -104,6 +88,7 @@
     details.legend[open] summary::before { content: "v"; }
     .legend-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 3px 0; }
     .legend-swatch { width: 22px; height: 12px; border: 1px solid #333; border-radius: 3px; flex-shrink: 0; }
+    .timelapse-row { display: flex; justify-content: flex-end; margin-top: 6px; }
     .timelapse-btn {
       padding: 8px 10px;
       border: none;
@@ -116,10 +101,13 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      flex-shrink: 0;
     }
     .timelapse-btn:hover { background: #f9a63f; }
-    .timeline { display: none; margin-top: 8px; font-size: 12px; }
+    .timeline {
+      display: none;
+      margin-top: 8px;
+      font-size: 12px;
+    }
     .timeline-bar {
       position: relative;
       height: 10px;
@@ -135,9 +123,6 @@
       background: #c0392b;
       transition: width 0.1s linear;
     }
-    .bottom-row { display: flex; gap: 6px; margin-top: 6px; align-items: flex-start; flex-wrap: wrap; }
-    .pie-wrap { flex: 1 1 150px; }
-    .legend-wrap { flex: 1 1 130px; }
     .ol-popup {
       position: absolute;
       background: white;
@@ -155,21 +140,21 @@
         left: 50%;
         right: auto;
         transform: translateX(-50%);
-        width: calc(100% - 18px);
+        width: calc(100% - 24px);
       }
       .toggle-row { justify-content: center; }
       details.legend { margin-top: 8px; }
+      .timelapse-btn { padding: 8px; }
       .timelapse-btn .tl-label { display: none; }
-      .bottom-row { flex-direction: column; }
     }
   </style>
 </head>
 <body>
   <div class="panel">
-    <h1>Suessmaus Karte Gemeindebau Wien</h1>
+    <h1>S&uuml;&szlig;maus Karte Gemeindebau Wien</h1>
     <div class="search-box">
       <div style="position:relative;">
-        <input id="hof-search" class="search-input" type="text" placeholder="Suche (HOFNAME) - min. 3 Zeichen" autocomplete="off">
+        <input id="hof-search" class="search-input" type="text" placeholder="Suche (HOFNAME) – min. 3 Zeichen" autocomplete="off">
         <div id="hof-suggestions" class="suggestions-list" style="display:none;"></div>
       </div>
     </div>
@@ -181,26 +166,18 @@
     </div>
     <div style="margin-top:4px;">
       <div style="font-weight:600;">Baujahr filtern <span id="year-labels">(1743 – 2025)</span></div>
-      <div class="time-control">
-        <button id="timelapse-btn" class="timelapse-btn"><span>▶</span><span class="tl-label">Timelapse</span></button>
-        <div class="slider-container" id="year-slider-row">
-          <div class="slider-track"></div>
-          <div id="thumb-min" class="thumb min" role="slider" aria-label="Minimum Baujahr"></div>
-          <div id="thumb-max" class="thumb max" role="slider" aria-label="Maximum Baujahr"></div>
-        </div>
+      <div class="slider-row" id="year-slider-row">
+        <input id="year-min" type="range" min="1743" max="2025" value="1743">
+        <input id="year-max" type="range" min="1743" max="2025" value="2025">
       </div>
       <div id="wohnungs-count" style="font-size:12px; margin-top:4px;">Wohnungsanzahl: -</div>
     </div>
-    <div class="bottom-row">
-      <div class="pie-wrap">
-        <svg id="pie-svg" width="220" height="140" viewBox="0 0 220 140" aria-label="Wohnungsanzahl Übersicht"></svg>
-      </div>
-      <div class="legend-wrap">
-        <details class="legend" id="legend">
-          <summary>Legende</summary>
-          <div id="legend-content"></div>
-        </details>
-      </div>
+    <details class="legend" id="legend">
+      <summary>Legende</summary>
+      <div id="legend-content"></div>
+    </details>
+    <div class="timelapse-row">
+      <button id="timelapse-btn" class="timelapse-btn"><span>▶</span><span class="tl-label">Timelapse</span></button>
     </div>
     <div id="timeline" class="timeline">
       <div style="font-weight:600;">Timeline <span id="timeline-year"></span></div>
@@ -212,6 +189,288 @@
   <div id="map"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.js"></script>
-  <script type="module" src="./app.js"></script>
+  <script>
+    const targetProjection = ol.proj.get("EPSG:3857");
+    const minYearBase = 1743;
+    const esriAttribution = "Tiles \u00a9 Esri";
+
+    const vectorSource = new ol.source.Vector();
+    const decadeColors = [
+      "#7a0177", // <1900
+      "#f7fcf0", "#e0f3db", "#ccebc5", "#a8ddb5", "#7bccc4",
+      "#4eb3d3", "#2b8cbe", "#0868ac", "#084081", "#fc8d59",
+      "#ef6548", "#d7301f", "#b30000", "#7f0000", "#49006a"
+    ];
+    const styleCache = {};
+    function styleByYear(feature, resolution) {
+      const y = parseInt(feature.get("BAUJAHR"), 10);
+      let key = "unknown";
+      if (Number.isFinite(y)) {
+        if (y < 1900) key = "<1900";
+        else {
+          const idx = Math.floor((y - 1900) / 10);
+          key = `d${idx}`;
+        }
+      }
+      const width = Math.max(2.2, Math.min(9, 1.2 + resolution / 12)); // ensure visibility when zoomed out
+      const cacheKey = `${key}-${Math.round(width * 10)}`;
+      if (!styleCache[cacheKey]) {
+        let fillColor = "#cccccc";
+        if (key === "<1900") fillColor = decadeColors[0];
+        else if (key.startsWith("d")) {
+          const idx = Math.min(decadeColors.length - 2, parseInt(key.slice(1), 10));
+          fillColor = decadeColors[1 + idx] || decadeColors[decadeColors.length - 1];
+        }
+        styleCache[cacheKey] = new ol.style.Style({
+          stroke: new ol.style.Stroke({ color: fillColor, width }),
+          fill: new ol.style.Fill({ color: fillColor + "cc" })
+        });
+      }
+      return styleCache[cacheKey];
+    }
+    const gemeindebauLayer = new ol.layer.Vector({
+      source: vectorSource,
+      style: styleByYear
+    });
+
+    const baseLayerBmap = new ol.layer.Tile({
+      source: new ol.source.XYZ({
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+        attributions: esriAttribution,
+        crossOrigin: "anonymous",
+        maxZoom: 19
+      }),
+      visible: true
+    });
+    const baseLayerOrtho = new ol.layer.Tile({
+      source: new ol.source.XYZ({
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        attributions: esriAttribution,
+        crossOrigin: "anonymous",
+        maxZoom: 19
+      }),
+      visible: false
+    });
+
+    const map = new ol.Map({
+      target: "map",
+      layers: [baseLayerBmap, baseLayerOrtho, gemeindebauLayer],
+      view: new ol.View({
+        projection: targetProjection,
+        center: ol.proj.fromLonLat([16.3738, 48.2082], targetProjection),
+        zoom: 13,
+        minZoom: 4,
+        maxZoom: 19
+      })
+    });
+    gemeindebauLayer.setZIndex(10);
+
+    document.querySelectorAll("input[name='basemap']").forEach((radio) => {
+      radio.addEventListener("change", () => {
+        const val = document.querySelector("input[name='basemap']:checked").value;
+        baseLayerBmap.setVisible(val === "bmap");
+        baseLayerOrtho.setVisible(val === "ortho");
+      });
+    });
+    document.getElementById("gemeindebau-toggle").addEventListener("change", (e) => {
+      gemeindebauLayer.setVisible(e.target.checked);
+    });
+    const searchInput = document.getElementById("hof-search");
+    const suggestionsBox = document.getElementById("hof-suggestions");
+
+    const popupEl = document.createElement("div");
+    popupEl.className = "ol-popup";
+    const popup = new ol.Overlay({
+      element: popupEl,
+      autoPan: { animation: { duration: 200 } }
+    });
+    map.addOverlay(popup);
+
+    fetch("GEMBAUTENFLOGD.json")
+      .then((r) => {
+        if (!r.ok) throw new Error(`GeoJSON load failed (${r.status})`);
+        return r.json();
+      })
+      .then((data) => {
+        const format = new ol.format.GeoJSON();
+        const allFeatures = format.readFeatures(data, {
+          dataProjection: "EPSG:4326",
+          featureProjection: targetProjection
+        });
+
+        const years = allFeatures
+          .map((f) => parseInt(f.get("BAUJAHR"), 10))
+          .filter((n) => Number.isFinite(n));
+        const minYear = Math.min(...years, minYearBase);
+        const maxYear = Math.max(...years);
+        const yearMin = document.getElementById("year-min");
+        const yearMax = document.getElementById("year-max");
+        const yearLabels = document.getElementById("year-labels");
+        const wohnCountEl = document.getElementById("wohnungs-count");
+        yearMin.min = minYearBase; yearMin.max = maxYear; yearMin.value = Math.max(minYearBase, minYear);
+        yearMax.min = minYearBase; yearMax.max = maxYear; yearMax.value = maxYear;
+        yearLabels.textContent = `(${yearMin.value} – ${yearMax.value})`;
+
+        const applyFilter = () => {
+          const lo = Math.min(parseInt(yearMin.value, 10), parseInt(yearMax.value, 10));
+          const hi = Math.max(parseInt(yearMin.value, 10), parseInt(yearMax.value, 10));
+          yearLabels.textContent = `(${lo} – ${hi})`;
+          const filtered = allFeatures.filter((f) => {
+            const y = parseInt(f.get("BAUJAHR"), 10);
+            return Number.isFinite(y) && y >= lo && y <= hi;
+          });
+          vectorSource.clear(true);
+          vectorSource.addFeatures(filtered);
+
+          const sumWohn = filtered.reduce((acc, f) => acc + (parseInt(f.get("WOHNUNGSANZAHL"), 10) || 0), 0);
+          wohnCountEl.textContent = `Wohnungsanzahl: ${sumWohn.toLocaleString("de-DE")}`;
+        };
+        yearMin.addEventListener("input", applyFilter);
+        yearMax.addEventListener("input", applyFilter);
+
+        vectorSource.addFeatures(allFeatures);
+        applyFilter();
+
+        const legendEl = document.getElementById("legend-content");
+        const legendItems = [
+          { label: "< 1900", color: decadeColors[0] }
+        ];
+        for (let start = 1900, i = 1; start <= 2020 && i < decadeColors.length; start += 10, i += 1) {
+          const end = start + 9;
+          legendItems.push({ label: `${start}-${end}`, color: decadeColors[i] || decadeColors[decadeColors.length - 1] });
+        }
+        legendEl.innerHTML = legendItems.map(item =>
+          `<div class="legend-row"><span class="legend-swatch" style="background:${item.color};"></span><span>${item.label}</span></div>`
+        ).join("");
+
+        const nameIndex = allFeatures
+          .map((f) => ({
+            id: f.getId() || f.ol_uid,
+            name: (f.get("HOFNAME") || "").toString(),
+            nameLc: (f.get("HOFNAME") || "").toString().toLowerCase(),
+            feature: f
+          }))
+          .filter((n) => n.nameLc.length > 0);
+
+        const renderSuggestions = (matches) => {
+          if (!matches.length) {
+            suggestionsBox.style.display = "none";
+            return;
+          }
+          suggestionsBox.innerHTML = matches
+            .slice(0, 8)
+            .map((m) => `<div class="suggestions-item" data-id="${m.id}">${m.name}</div>`)
+            .join("");
+          suggestionsBox.style.display = "block";
+        };
+
+        const doSearch = (query, fly = false) => {
+          const q = query.toLowerCase().trim();
+          if (q.length < 3) {
+            renderSuggestions([]);
+            return;
+          }
+          const matches = nameIndex.filter((n) => n.nameLc.includes(q));
+          renderSuggestions(matches);
+          if (fly && matches.length) {
+            const f = matches[0].feature;
+            const geom = f.getGeometry();
+            if (geom) {
+              map.getView().fit(geom.getExtent(), { padding: [30, 30, 30, 30], duration: 200 });
+            }
+          }
+        };
+
+        searchInput.addEventListener("input", () => doSearch(searchInput.value));
+        searchInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            doSearch(searchInput.value, true);
+            suggestionsBox.style.display = "none";
+          }
+          if (e.key === "Escape") suggestionsBox.style.display = "none";
+        });
+        suggestionsBox.addEventListener("click", (e) => {
+          const id = e.target.getAttribute("data-id");
+          if (!id) return;
+          const match = nameIndex.find((n) => (n.id || "").toString() === id.toString());
+          if (match) {
+            const geom = match.feature.getGeometry();
+            if (geom) {
+              map.getView().fit(geom.getExtent(), { padding: [30, 30, 30, 30], duration: 200 });
+            }
+            searchInput.value = match.name;
+          }
+          suggestionsBox.style.display = "none";
+        });
+
+        map.on("pointerdown", () => {
+          suggestionsBox.style.display = "none";
+        });
+
+        const tlBtn = document.getElementById("timelapse-btn");
+        const timeline = document.getElementById("timeline");
+        const tlYear = document.getElementById("timeline-year");
+        const tlProgress = document.getElementById("timeline-progress");
+        let tlTimer = null;
+        const TL_START = minYearBase;
+        const TL_END = Math.min(2023, maxYear);
+
+        const stopTimelapse = () => {
+          if (tlTimer) clearTimeout(tlTimer);
+          tlTimer = null;
+          tlBtn.innerHTML = '<span>▶</span><span class="tl-label">Timelapse</span>';
+          timeline.style.display = "none";
+        };
+
+        const startTimelapse = () => {
+          timeline.style.display = "block";
+          tlBtn.innerHTML = '<span>⏸</span><span class="tl-label">Stop</span>';
+          let current = TL_START;
+          const step = () => {
+            yearMin.value = TL_START;
+            yearMax.value = current;
+            applyFilter();
+            const pct = ((current - TL_START) / (TL_END - TL_START)) * 100;
+            tlProgress.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+            tlYear.textContent = current;
+            current += 1;
+            if (current > TL_END) {
+              stopTimelapse();
+              return;
+            }
+            const delay = current < 1900 ? 80 : 140; // faster before 1900
+            tlTimer = setTimeout(step, delay);
+          };
+          step();
+        };
+
+        tlBtn.addEventListener("click", () => {
+          if (tlTimer) stopTimelapse();
+          else startTimelapse();
+        });
+      })
+      .catch((err) => {
+        console.error(err);
+        alert("Konnte die GeoJSON nicht laden. Details in der Konsole.");
+      });
+
+    map.on("singleclick", (evt) => {
+      popup.setPosition(undefined);
+      map.forEachFeatureAtPixel(evt.pixel, (feature) => {
+        const p = feature.getProperties();
+        popupEl.innerHTML = `
+          <div style="font-weight:700;margin-bottom:4px;">${p.HOFNAME || "Gemeindebau"}</div>
+          <div><strong>Baujahr:</strong> ${p.BAUJAHR || "-"}</div>
+          <div><strong>Adresse:</strong> ${p.ADRESSE || "-"}</div>
+          <div><strong>Wohnungsanzahl:</strong> ${p.WOHNUNGSANZAHL ?? "-"}</div>
+          <div><strong>Bezirk:</strong> ${p.BEZIRK ?? "-"}</div>
+          <div><a href="${p.PDFLINK || "#"}" target="_blank" rel="noopener">PDF</a></div>
+        `;
+        popup.setPosition(evt.coordinate);
+        return true;
+      });
+    });
+  </script>
 </body>
 </html>
