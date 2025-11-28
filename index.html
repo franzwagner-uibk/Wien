@@ -74,6 +74,39 @@
     details.legend[open] summary::before { content: "▾"; }
     .legend-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 3px 0; }
     .legend-swatch { width: 22px; height: 12px; border: 1px solid #333; border-radius: 3px; flex-shrink: 0; }
+    .timelapse-btn {
+      margin-top: 6px;
+      width: 100%;
+      padding: 8px 10px;
+      border: none;
+      border-radius: 6px;
+      background: #f7941d;
+      color: #111;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    .timelapse-btn:hover { background: #f9a63f; }
+    .timeline {
+      display: none;
+      margin-top: 8px;
+      font-size: 12px;
+    }
+    .timeline-bar {
+      position: relative;
+      height: 10px;
+      background: rgba(0,0,0,0.15);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    .timeline-progress {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 0%;
+      background: #c0392b;
+      transition: width 0.1s linear;
+    }
     .ol-popup {
       position: absolute;
       background: white;
@@ -126,6 +159,13 @@
       <summary>Legende</summary>
       <div id="legend-content"></div>
     </details>
+    <button id="timelapse-btn" class="timelapse-btn">▶️ Timelapse</button>
+    <div id="timeline" class="timeline">
+      <div style="font-weight:600;">Timeline <span id="timeline-year"></span></div>
+      <div class="timeline-bar">
+        <div id="timeline-progress" class="timeline-progress"></div>
+      </div>
+    </div>
   </div>
   <div id="map"></div>
 
@@ -348,6 +388,47 @@
 
         map.on("pointerdown", () => {
           suggestionsBox.style.display = "none";
+        });
+
+        // Timelapse controls
+        const tlBtn = document.getElementById("timelapse-btn");
+        const timeline = document.getElementById("timeline");
+        const tlYear = document.getElementById("timeline-year");
+        const tlProgress = document.getElementById("timeline-progress");
+        let tlTimer = null;
+        const TL_START = Math.max(minYearBase, Math.min(minYearBase, minYearBase));
+        const TL_END = Math.min(2023, maxYear);
+
+        const stopTimelapse = () => {
+          if (tlTimer) clearInterval(tlTimer);
+          tlTimer = null;
+          tlBtn.textContent = "▶️ Timelapse";
+          timeline.style.display = "none";
+        };
+
+        const startTimelapse = () => {
+          timeline.style.display = "block";
+          tlBtn.textContent = "⏸️ Stop";
+          let current = TL_START;
+          const step = () => {
+            yearMin.value = TL_START;
+            yearMax.value = current;
+            applyFilter();
+            const pct = ((current - TL_START) / (TL_END - TL_START)) * 100;
+            tlProgress.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+            tlYear.textContent = current;
+            current += 1;
+            if (current > TL_END) {
+              stopTimelapse();
+            }
+          };
+          step();
+          tlTimer = setInterval(step, 300);
+        };
+
+        tlBtn.addEventListener("click", () => {
+          if (tlTimer) stopTimelapse();
+          else startTimelapse();
         });
       })
       .catch((err) => {
