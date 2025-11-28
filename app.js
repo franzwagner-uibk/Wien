@@ -4,7 +4,7 @@ const esriAttribution = "Tiles © Esri";
 
 const categoryColors = {
   pre1919: "#7a0010",
-  zwischen: "#b00000",
+  zwischen: "#b00000", // deep red
   wieder: "#f28e2b",
   gross: "#4e79a7",
   postmodern: "#9c6ade",
@@ -104,18 +104,19 @@ const popup = new ol.Overlay({
 });
 map.addOverlay(popup);
 
-const pieSvg = document.getElementById("pie-svg");
 const legendEl = document.getElementById("legend-content");
 legendEl.innerHTML = legendItems.map(item =>
   `<div class="legend-row"><span class="legend-swatch" style="background:${item.color};"></span><span>${item.label}</span></div>`
 ).join("");
 
-const yearMin = document.getElementById("year-min");
-const yearMax = document.getElementById("year-max");
+const pieSvg = document.getElementById("pie-svg");
 const yearLabels = document.getElementById("year-labels");
 const wohnCountEl = document.getElementById("wohnungs-count");
+const yearMin = document.getElementById("year-min");
+const yearMax = document.getElementById("year-max");
 const thumbMin = document.getElementById("thumb-min");
 const thumbMax = document.getElementById("thumb-max");
+const sliderRow = document.getElementById("year-slider-row");
 
 let allFeatures = [];
 let allTotals = {};
@@ -130,10 +131,11 @@ function positionThumbs(lo, hi) {
   thumbMax.style.left = `${pctMax}%`;
 }
 
-function describeSlices(slices, totalMax, cx, cy, r) {
+function describeSlices(slices, totalMax, cx, cy, r, remainderColor = "#ddd") {
   let start = -Math.PI / 2;
-  return slices.map((s) => {
-    const angle = (s.value / totalMax) * Math.PI * 2;
+  const totalVal = slices.reduce((acc, s) => acc + s.value, 0);
+  const parts = slices.map((s) => {
+    const angle = totalMax > 0 ? (s.value / totalMax) * Math.PI * 2 : 0;
     const end = start + angle;
     const largeArc = angle > Math.PI ? 1 : 0;
     const x1 = cx + r * Math.cos(start);
@@ -143,7 +145,19 @@ function describeSlices(slices, totalMax, cx, cy, r) {
     const d = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
     start = end;
     return `<path d="${d}" fill="${s.color}" stroke="#111" stroke-width="1" />`;
-  }).join("");
+  });
+  if (totalVal < totalMax) {
+    const angle = ((totalMax - totalVal) / totalMax) * Math.PI * 2;
+    const end = start + angle;
+    const largeArc = angle > Math.PI ? 1 : 0;
+    const x1 = cx + r * Math.cos(start);
+    const y1 = cy + r * Math.sin(start);
+    const x2 = cx + r * Math.cos(end);
+    const y2 = cy + r * Math.sin(end);
+    const d = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+    parts.push(`<path d="${d}" fill="${remainderColor}" stroke="#111" stroke-width="1" />`);
+  }
+  return parts.join("");
 }
 
 function updatePie(filtered, sumWohn, totals) {
@@ -197,33 +211,33 @@ function applyFilter() {
 }
 
 function bindThumb(thumbEl, isMin) {
-  const onMove = (clientX) => {
-    const rect = document.getElementById("year-slider-row").getBoundingClientRect();
-    const min = parseInt(yearMin.min, 10);
-    const max = parseInt(yearMin.max, 10);
-    const range = max - min;
-    const pct = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-    const val = Math.round(min + pct * range);
-    if (isMin) {
-      yearMin.value = Math.min(val, parseInt(yearMax.value, 10));
-    } else {
-      yearMax.value = Math.max(val, parseInt(yearMin.value, 10));
-    }
-    applyFilter();
-  };
-  const startDrag = (e) => {
-    e.preventDefault();
-    const move = (ev) => onMove(ev.clientX || (ev.touches && ev.touches[0].clientX));
-    const up = () => {
+  const startDrag = (startEvent) => {
+    startEvent.preventDefault();
+    const move = (ev) => {
+      const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
+      const rect = sliderRow.getBoundingClientRect();
+      const min = parseInt(yearMin.min, 10);
+      const max = parseInt(yearMin.max, 10);
+      const range = max - min;
+      const pct = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+      const val = Math.round(min + pct * range);
+      if (isMin) {
+        yearMin.value = Math.min(val, parseInt(yearMax.value, 10));
+      } else {
+        yearMax.value = Math.max(val, parseInt(yearMin.value, 10));
+      }
+      applyFilter();
+    };
+    const end = () => {
       window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointerup", end);
       window.removeEventListener("touchmove", move);
-      window.removeEventListener("touchend", up);
+      window.removeEventListener("touchend", end);
     };
     window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    window.addEventListener("pointerup", end);
     window.addEventListener("touchmove", move);
-    window.addEventListener("touchend", up);
+    window.addEventListener("touchend", end);
   };
   thumbEl.addEventListener("pointerdown", startDrag);
   thumbEl.addEventListener("touchstart", startDrag);
@@ -231,7 +245,6 @@ function bindThumb(thumbEl, isMin) {
 
 bindThumb(thumbMin, true);
 bindThumb(thumbMax, false);
-
 yearMin.addEventListener("input", applyFilter);
 yearMax.addEventListener("input", applyFilter);
 
@@ -407,4 +420,3 @@ map.on("singleclick", (evt) => {
     return true;
   });
 });
-
