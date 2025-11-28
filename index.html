@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Süßmaus Karte Gemeindebau Wien</title>
+  <title>Suessmaus Karte Gemeindebau Wien</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/ol.css">
   <style>
     html, body { margin: 0; height: 100%; }
@@ -11,26 +11,47 @@
     .panel {
       position: absolute;
       top: 12px;
-      left: 12px;
+      right: 12px;
       z-index: 1000;
-      background: rgba(255, 255, 255, 0.92);
+      background: rgba(255, 255, 255, 0.95);
       padding: 10px 12px;
-      border-radius: 6px;
+      border-radius: 10px;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
       font-size: 14px;
       line-height: 1.4;
-      width: 320px;
+      width: 340px;
       max-width: calc(100% - 24px);
     }
-    .panel h1 {
-      margin: 0 0 6px;
-      font-size: 16px;
-      font-weight: 700;
-    }
+    .panel h1 { margin: 0 0 6px; font-size: 16px; font-weight: 700; }
     .panel label { display: flex; align-items: center; gap: 6px; user-select: none; }
     .slider-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
     .slider-row input[type="range"] { flex: 1; }
+    .search-box { margin-top: 8px; }
+    .search-input {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    .suggestions-list {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      margin-top: 2px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      max-height: 180px;
+      overflow-y: auto;
+      z-index: 1500;
+    }
+    .suggestions-item { padding: 6px 8px; cursor: pointer; }
+    .suggestions-item:hover { background: #f0f4ff; }
     .ol-popup {
       position: absolute;
       background: white;
@@ -43,15 +64,30 @@
     }
     .ol-popup a { color: #1a73e8; text-decoration: none; }
     .ol-popup a:hover { text-decoration: underline; }
+    @media (max-width: 540px) {
+      .panel {
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+        width: calc(100% - 24px);
+      }
+    }
   </style>
 </head>
 <body>
   <div class="panel">
-    <h1>Süßmaus Karte Gemeindebau Wien</h1>
-    <div style="margin-bottom:6px;">
+    <h1>Suessmaus Karte Gemeindebau Wien</h1>
+    <div class="search-box">
+      <div style="font-weight:600;">Suche (HOFNAME)</div>
+      <div style="position:relative;">
+        <input id="hof-search" class="search-input" type="text" placeholder="Tippe min. 3 Zeichen..." autocomplete="off">
+        <div id="hof-suggestions" class="suggestions-list" style="display:none;"></div>
+      </div>
+    </div>
+    <div style="margin-top:8px; margin-bottom:6px;">
       <strong>Basemap:</strong>
-      <label style="margin-left:6px;"><input type="radio" name="basemap" value="bmap" checked> Basemap.at</label>
-      <label style="margin-left:6px;"><input type="radio" name="basemap" value="ortho"> Orthofoto</label>
+      <label style="margin-left:6px;"><input type="radio" name="basemap" value="bmap"> Basemap.at</label>
+      <label style="margin-left:6px;"><input type="radio" name="basemap" value="ortho" checked> Orthofoto</label>
     </div>
     <div style="margin-bottom:6px;">
       <label><input id="gemeindebau-toggle" type="checkbox" checked> Gemeindebau</label>
@@ -120,7 +156,7 @@
         }
         styleCache[key] = new ol.style.Style({
           stroke,
-          fill: new ol.style.Fill({ color: fillColor + "cc" }) // slight transparency
+          fill: new ol.style.Fill({ color: fillColor + "cc" })
         });
       }
       return styleCache[key];
@@ -132,8 +168,8 @@
 
     createBasemapSources()
       .then(({ bmap, ortho }) => {
-        const baseLayerBmap = new ol.layer.Tile({ source: bmap });
-        const baseLayerOrtho = new ol.layer.Tile({ source: ortho, visible: false });
+        const baseLayerBmap = new ol.layer.Tile({ source: bmap, visible: false });
+        const baseLayerOrtho = new ol.layer.Tile({ source: ortho, visible: true });
 
         const map = new ol.Map({
           target: "map",
@@ -141,13 +177,12 @@
           view: new ol.View({
             projection: targetProjection,
             center: ol.proj.fromLonLat([16.3738, 48.2082], targetProjection),
-            zoom: 12,
+            zoom: 15.5,
             minZoom: 4,
             maxZoom: 19
           })
         });
 
-        // Basemap toggle
         document.querySelectorAll("input[name='basemap']").forEach((radio) => {
           radio.addEventListener("change", () => {
             const val = document.querySelector("input[name='basemap']:checked").value;
@@ -158,6 +193,8 @@
         document.getElementById("gemeindebau-toggle").addEventListener("change", (e) => {
           gemeindebauLayer.setVisible(e.target.checked);
         });
+        const searchInput = document.getElementById("hof-search");
+        const suggestionsBox = document.getElementById("hof-suggestions");
 
         // Popup overlay
         const popupEl = document.createElement("div");
@@ -209,6 +246,72 @@
 
             vectorSource.addFeatures(allFeatures);
             applyFilter();
+
+            // Search index
+            const nameIndex = allFeatures
+              .map((f) => ({
+                id: f.getId() || f.ol_uid,
+                name: (f.get("HOFNAME") || "").toString(),
+                nameLc: (f.get("HOFNAME") || "").toString().toLowerCase(),
+                feature: f
+              }))
+              .filter((n) => n.nameLc.length > 0);
+
+            const renderSuggestions = (matches) => {
+              if (!matches.length) {
+                suggestionsBox.style.display = "none";
+                return;
+              }
+              suggestionsBox.innerHTML = matches
+                .slice(0, 8)
+                .map((m) => `<div class="suggestions-item" data-id="${m.id}">${m.name}</div>`)
+                .join("");
+              suggestionsBox.style.display = "block";
+            };
+
+            const doSearch = (query, fly = false) => {
+              const q = query.toLowerCase().trim();
+              if (q.length < 3) {
+                renderSuggestions([]);
+                return;
+              }
+              const matches = nameIndex.filter((n) => n.nameLc.includes(q));
+              renderSuggestions(matches);
+              if (fly && matches.length) {
+                const f = matches[0].feature;
+                const geom = f.getGeometry();
+                if (geom) {
+                  map.getView().fit(geom.getExtent(), { padding: [30, 30, 30, 30], duration: 200 });
+                }
+              }
+            };
+
+            searchInput.addEventListener("input", () => doSearch(searchInput.value));
+            searchInput.addEventListener("keydown", (e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                doSearch(searchInput.value, true);
+                suggestionsBox.style.display = "none";
+              }
+              if (e.key === "Escape") suggestionsBox.style.display = "none";
+            });
+            suggestionsBox.addEventListener("click", (e) => {
+              const id = e.target.getAttribute("data-id");
+              if (!id) return;
+              const match = nameIndex.find((n) => (n.id || "").toString() === id.toString());
+              if (match) {
+                const geom = match.feature.getGeometry();
+                if (geom) {
+                  map.getView().fit(geom.getExtent(), { padding: [30, 30, 30, 30], duration: 200 });
+                }
+                searchInput.value = match.name;
+              }
+              suggestionsBox.style.display = "none";
+            });
+
+            map.on("pointerdown", () => {
+              suggestionsBox.style.display = "none";
+            });
           })
           .catch((err) => {
             console.error(err);
