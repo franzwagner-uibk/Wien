@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>S&uuml;&szlig;maus Karte Gemeindebau Wien</title>
+  <title>Süßmaus Karte Gemeindebau Wien</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@latest/ol.css">
   <style>
     html, body { margin: 0; height: 100%; }
@@ -25,19 +25,6 @@
     }
     .panel h1 { margin: 0 0 6px; font-size: 16px; font-weight: 700; }
     .panel label { display: flex; align-items: center; gap: 6px; user-select: none; }
-    .slider-row {
-      position: relative;
-      height: 36px;
-      margin-top: 4px;
-    }
-    .slider-row input[type="range"] {
-      position: absolute;
-      left: 0;
-      right: 0;
-      width: 100%;
-      margin: 0;
-      background: transparent;
-    }
     .toggle-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .search-box { margin-top: 8px; }
     .search-input {
@@ -64,6 +51,23 @@
     }
     .suggestions-item { padding: 6px 8px; cursor: pointer; }
     .suggestions-item:hover { background: #f0f4ff; }
+    .time-control { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+    .slider-row {
+      position: relative;
+      height: 36px;
+      flex: 1;
+    }
+    .slider-row input[type="range"] {
+      position: absolute;
+      left: 0;
+      right: 0;
+      width: 100%;
+      margin: 0;
+      background: transparent;
+      pointer-events: auto;
+    }
+    #year-min { z-index: 3; top: 2px; }
+    #year-max { z-index: 2; top: 0; }
     details.legend {
       margin-top: 10px;
       padding: 8px;
@@ -88,7 +92,6 @@
     details.legend[open] summary::before { content: "v"; }
     .legend-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 3px 0; }
     .legend-swatch { width: 22px; height: 12px; border: 1px solid #333; border-radius: 3px; flex-shrink: 0; }
-    .timelapse-row { display: flex; justify-content: flex-end; margin-top: 6px; }
     .timelapse-btn {
       padding: 8px 10px;
       border: none;
@@ -101,6 +104,7 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      flex-shrink: 0;
     }
     .timelapse-btn:hover { background: #f9a63f; }
     .timeline {
@@ -144,14 +148,13 @@
       }
       .toggle-row { justify-content: center; }
       details.legend { margin-top: 8px; }
-      .timelapse-btn { padding: 8px; }
       .timelapse-btn .tl-label { display: none; }
     }
   </style>
 </head>
 <body>
   <div class="panel">
-    <h1>S&uuml;&szlig;maus Karte Gemeindebau Wien</h1>
+    <h1>Süßmaus Karte Gemeindebau Wien</h1>
     <div class="search-box">
       <div style="position:relative;">
         <input id="hof-search" class="search-input" type="text" placeholder="Suche (HOFNAME) – min. 3 Zeichen" autocomplete="off">
@@ -166,9 +169,12 @@
     </div>
     <div style="margin-top:4px;">
       <div style="font-weight:600;">Baujahr filtern <span id="year-labels">(1743 – 2025)</span></div>
-      <div class="slider-row" id="year-slider-row">
-        <input id="year-min" type="range" min="1743" max="2025" value="1743">
-        <input id="year-max" type="range" min="1743" max="2025" value="2025">
+      <div class="time-control">
+        <button id="timelapse-btn" class="timelapse-btn"><span>▶</span><span class="tl-label">Timelapse</span></button>
+        <div class="slider-row" id="year-slider-row">
+          <input id="year-min" type="range" min="1743" max="2025" value="1743">
+          <input id="year-max" type="range" min="1743" max="2025" value="2025">
+        </div>
       </div>
       <div id="wohnungs-count" style="font-size:12px; margin-top:4px;">Wohnungsanzahl: -</div>
     </div>
@@ -176,9 +182,6 @@
       <summary>Legende</summary>
       <div id="legend-content"></div>
     </details>
-    <div class="timelapse-row">
-      <button id="timelapse-btn" class="timelapse-btn"><span>▶</span><span class="tl-label">Timelapse</span></button>
-    </div>
     <div id="timeline" class="timeline">
       <div style="font-weight:600;">Timeline <span id="timeline-year"></span></div>
       <div class="timeline-bar">
@@ -192,7 +195,7 @@
   <script>
     const targetProjection = ol.proj.get("EPSG:3857");
     const minYearBase = 1743;
-    const esriAttribution = "Tiles \u00a9 Esri";
+    const esriAttribution = "Tiles © Esri";
 
     const vectorSource = new ol.source.Vector();
     const decadeColors = [
@@ -212,7 +215,7 @@
           key = `d${idx}`;
         }
       }
-      const width = Math.max(2.2, Math.min(9, 1.2 + resolution / 12)); // ensure visibility when zoomed out
+      const width = Math.max(2.2, Math.min(9, 1.2 + resolution / 12));
       const cacheKey = `${key}-${Math.round(width * 10)}`;
       if (!styleCache[cacheKey]) {
         let fillColor = "#cccccc";
@@ -321,7 +324,6 @@
           });
           vectorSource.clear(true);
           vectorSource.addFeatures(filtered);
-
           const sumWohn = filtered.reduce((acc, f) => acc + (parseInt(f.get("WOHNUNGSANZAHL"), 10) || 0), 0);
           wohnCountEl.textContent = `Wohnungsanzahl: ${sumWohn.toLocaleString("de-DE")}`;
         };
@@ -415,6 +417,8 @@
         let tlTimer = null;
         const TL_START = minYearBase;
         const TL_END = Math.min(2023, maxYear);
+        const FAST_DELAY = 60;   // ms before 1900
+        const SLOW_DELAY = 170;  // ms from 1900 onward
 
         const stopTimelapse = () => {
           if (tlTimer) clearTimeout(tlTimer);
@@ -439,7 +443,7 @@
               stopTimelapse();
               return;
             }
-            const delay = current < 1900 ? 80 : 140; // faster before 1900
+            const delay = current < 1900 ? FAST_DELAY : SLOW_DELAY;
             tlTimer = setTimeout(step, delay);
           };
           step();
