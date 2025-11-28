@@ -20,33 +20,56 @@
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
       font-size: 14px;
       line-height: 1.4;
+      width: 320px;
+      max-width: calc(100% - 24px);
     }
     .panel h1 {
       margin: 0 0 6px;
       font-size: 16px;
       font-weight: 700;
     }
-    .panel label {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      user-select: none;
+    .panel label { display: flex; align-items: center; gap: 6px; user-select: none; }
+    .slider-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+    .slider-row input[type="range"] { flex: 1; }
+    .ol-popup {
+      position: absolute;
+      background: white;
+      padding: 8px 10px;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+      font-family: system-ui, sans-serif;
+      font-size: 13px;
+      min-width: 200px;
     }
+    .ol-popup a { color: #1a73e8; text-decoration: none; }
+    .ol-popup a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
   <div class="panel">
     <h1>Süßmaus Karte Gemeindebau Wien</h1>
-    <label><input id="gemeindebau-toggle" type="checkbox" checked> Gemeindebau</label>
+    <div style="margin-bottom:6px;">
+      <strong>Basemap:</strong>
+      <label style="margin-left:6px;"><input type="radio" name="basemap" value="bmap" checked> Basemap.at</label>
+      <label style="margin-left:6px;"><input type="radio" name="basemap" value="ortho"> Orthofoto</label>
+    </div>
+    <div style="margin-bottom:6px;">
+      <label><input id="gemeindebau-toggle" type="checkbox" checked> Gemeindebau</label>
+    </div>
+    <div style="margin-top:4px;">
+      <div style="font-weight:600;">Baujahr filtern</div>
+      <div class="slider-row">
+        <input id="year-min" type="range" min="1900" max="2025" value="1900">
+        <input id="year-max" type="range" min="1900" max="2025" value="2025">
+      </div>
+      <div id="year-labels" style="font-size:12px; margin-top:2px;">1900 – 2025</div>
+    </div>
   </div>
   <div id="map"></div>
 
-  <!-- Use prebuilt OpenLayers bundle (avoids bare-specifier issues) -->
   <script src="https://cdn.jsdelivr.net/npm/proj4@2.9.1/dist/proj4.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ol@latest/dist/ol.js"></script>
   <script>
-    const wmtsUrl = "https://mapsneu.wien.gv.at/basemap31256neu/1.0.0/WMTSCapabilities.xml";
-    const wfsUrl = "https://data.wien.gv.at/daten/geo";
     const targetProjectionCode = "EPSG:31256";
 
     // Register EPSG:31256 for OL (Bessel + towgs84)
@@ -58,77 +81,151 @@
     ol.proj.proj4.register(proj4);
     const targetProjection = ol.proj.get(targetProjectionCode);
 
-    async function buildMap() {
-      // Parse WMTS capabilities for basemap.at (EPSG:31256)
-      const wmtsResponse = await fetch(wmtsUrl);
-      if (!wmtsResponse.ok) throw new Error(`WMTS capabilities request failed (${wmtsResponse.status})`);
-      const capabilitiesText = await wmtsResponse.text();
-      // Build WMTS source manually (avoids any axis-order quirks)
-      const resolutions = [
-        69359.0720514687, 34679.5360257344, 17339.7680128672, 8669.88400643359,
-        4334.94200321679, 2167.4710016084, 1083.7355008042, 541.867750402099,
-        270.93387520105, 135.466937600525, 67.7334688002624, 33.8667344001312,
-        16.9333672000656, 8.4666836000328, 4.2333418000164, 2.1166709000082,
-        1.0583354500041, 0.52916772500205, 0.264583862501025, 0.132291931250513
-      ];
-      const matrixIds = Array.from({ length: resolutions.length }, (_, i) => i.toString());
-      const tileGrid = new ol.tilegrid.WMTS({
-        origin: [5001000.0, -5622500.0],
-        resolutions,
-        matrixIds,
-        tileSize: [256, 256]
+    // Basemap tile grid for EPSG:31256
+    const resolutions = [
+      69359.0720514687, 34679.5360257344, 17339.7680128672, 8669.88400643359,
+      4334.94200321679, 2167.4710016084, 1083.7355008042, 541.867750402099,
+      270.93387520105, 135.466937600525, 67.7334688002624, 33.8667344001312,
+      16.9333672000656, 8.4666836000328, 4.2333418000164, 2.1166709000082,
+      1.0583354500041, 0.52916772500205, 0.264583862501025, 0.132291931250513
+    ];
+    const matrixIds = Array.from({ length: resolutions.length }, (_, i) => i.toString());
+    const tileGrid = new ol.tilegrid.WMTS({
+      origin: [5001000.0, -5622500.0],
+      resolutions,
+      matrixIds,
+      tileSize: [256, 256]
+    });
+
+    const baseLayerBmap = new ol.layer.Tile({
+      source: new ol.source.WMTS({
+        url: "https://mapsneu.wien.gv.at/basemap/bmap/{Style}/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png",
+        layer: "bmap",
+        matrixSet: "31256",
+        format: "image/png",
+        style: "farbe",
+        tileGrid,
+        crossOrigin: "anonymous"
+      })
+    });
+    const baseLayerOrtho = new ol.layer.Tile({
+      source: new ol.source.WMTS({
+        url: "https://mapsneu.wien.gv.at/basemap/bmaporthofoto/{Style}/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png",
+        layer: "bmaporthofoto",
+        matrixSet: "31256",
+        format: "image/png",
+        style: "farbe",
+        tileGrid,
+        crossOrigin: "anonymous"
+      }),
+      visible: false
+    });
+
+    const vectorSource = new ol.source.Vector();
+    const gemeindebauLayer = new ol.layer.Vector({
+      source: vectorSource,
+      style: new ol.style.Style({
+        stroke: new ol.style.Stroke({ color: "#c0392b", width: 1.4 }),
+        fill: new ol.style.Fill({ color: "rgba(192,57,43,0.25)" })
+      })
+    });
+
+    const map = new ol.Map({
+      target: "map",
+      layers: [baseLayerBmap, baseLayerOrtho, gemeindebauLayer],
+      view: new ol.View({
+        projection: targetProjection,
+        center: ol.proj.fromLonLat([16.3738, 48.2082], targetProjection),
+        zoom: 12,
+        minZoom: 4,
+        maxZoom: 18
+      })
+    });
+
+    // Basemap toggle
+    document.querySelectorAll("input[name='basemap']").forEach((radio) => {
+      radio.addEventListener("change", () => {
+        const val = document.querySelector("input[name='basemap']:checked").value;
+        baseLayerBmap.setVisible(val === "bmap");
+        baseLayerOrtho.setVisible(val === "ortho");
+      });
+    });
+    document.getElementById("gemeindebau-toggle").addEventListener("change", (e) => {
+      gemeindebauLayer.setVisible(e.target.checked);
+    });
+
+    // Popup overlay
+    const popupEl = document.createElement("div");
+    popupEl.className = "ol-popup";
+    const popup = new ol.Overlay({
+      element: popupEl,
+      autoPan: { animation: { duration: 200 } }
+    });
+    map.addOverlay(popup);
+
+    // Load local GeoJSON and set up filtering
+    fetch("GEMBAUTENFLOGD.json")
+      .then((r) => {
+        if (!r.ok) throw new Error(`GeoJSON load failed (${r.status})`);
+        return r.json();
+      })
+      .then((data) => {
+        const format = new ol.format.GeoJSON();
+        const allFeatures = format.readFeatures(data, {
+          dataProjection: "EPSG:4326",
+          featureProjection: targetProjection
+        });
+
+        const years = allFeatures
+          .map((f) => parseInt(f.get("BAUJAHR"), 10))
+          .filter((n) => Number.isFinite(n));
+        const minYear = Math.min(...years);
+        const maxYear = Math.max(...years);
+        const yearMin = document.getElementById("year-min");
+        const yearMax = document.getElementById("year-max");
+        const yearLabels = document.getElementById("year-labels");
+        yearMin.min = minYear; yearMin.max = maxYear; yearMin.value = minYear;
+        yearMax.min = minYear; yearMax.max = maxYear; yearMax.value = maxYear;
+        yearLabels.textContent = `${minYear} – ${maxYear}`;
+
+        const applyFilter = () => {
+          const lo = Math.min(parseInt(yearMin.value, 10), parseInt(yearMax.value, 10));
+          const hi = Math.max(parseInt(yearMin.value, 10), parseInt(yearMax.value, 10));
+          yearLabels.textContent = `${lo} – ${hi}`;
+          const filtered = allFeatures.filter((f) => {
+            const y = parseInt(f.get("BAUJAHR"), 10);
+            return Number.isFinite(y) && y >= lo && y <= hi;
+          });
+          vectorSource.clear(true);
+          vectorSource.addFeatures(filtered);
+        };
+        yearMin.addEventListener("input", applyFilter);
+        yearMax.addEventListener("input", applyFilter);
+
+        vectorSource.addFeatures(allFeatures);
+        applyFilter();
+      })
+      .catch((err) => {
+        console.error(err);
+        alert("Konnte die GeoJSON nicht laden. Details in der Konsole.");
       });
 
-      const basemap = new ol.layer.Tile({
-        source: new ol.source.WMTS({
-          url: "https://mapsneu.wien.gv.at/basemap/bmap/{Style}/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png",
-          layer: "bmap",
-          matrixSet: "31256",
-          format: "image/png",
-          style: "farbe",
-          tileGrid,
-          crossOrigin: "anonymous"
-        })
+    // Click popup
+    map.on("singleclick", (evt) => {
+      popup.setPosition(undefined);
+      map.forEachFeatureAtPixel(evt.pixel, (feature) => {
+        const p = feature.getProperties();
+        popupEl.innerHTML = `
+          <div style="font-weight:700;margin-bottom:4px;">${p.HOFNAME || "Gemeindebau"}</div>
+          <div><strong>Baujahr:</strong> ${p.BAUJAHR || "-"}</div>
+          <div><strong>Adresse:</strong> ${p.ADRESSE || "-"}</div>
+          <div><strong>Wohnungsanzahl:</strong> ${p.WOHNUNGSANZAHL ?? "-"}</div>
+          <div><strong>Bezirk:</strong> ${p.BEZIRK ?? "-"}</div>
+          <div><a href="${p.PDFLINK || "#"}" target="_blank" rel="noopener">PDF</a></div>
+        `;
+        popup.setPosition(evt.coordinate);
+        return true;
       });
-
-      const gemeindebauLayer = new ol.layer.Vector({
-        source: new ol.source.Vector({
-          format: new ol.format.GeoJSON({
-            dataProjection: targetProjectionCode,
-            featureProjection: targetProjectionCode
-          }),
-          url: `${wfsUrl}?service=WFS&version=1.1.0&request=GetFeature&typeName=${encodeURIComponent(
-            "ogdwien:GEMBAUTENFLOGD"
-          )}&srsName=${encodeURIComponent("urn:ogc:def:crs:EPSG::31256")}&outputFormat=application/json`
-        }),
-        style: new ol.style.Style({
-          stroke: new ol.style.Stroke({ color: "#c0392b", width: 1.4 }),
-          fill: new ol.style.Fill({ color: "rgba(192,57,43,0.25)" })
-        })
-      });
-
-      const map = new ol.Map({
-        target: "map",
-        layers: [basemap, gemeindebauLayer],
-        view: new ol.View({
-          projection: targetProjection,
-          center: ol.proj.fromLonLat([16.3738, 48.2082], targetProjection), // Vienna center
-          zoom: 12,
-          minZoom: 4,
-          maxZoom: 18
-        })
-      });
-
-      // Toggle visibility
-      const toggle = document.getElementById("gemeindebau-toggle");
-      toggle.addEventListener("change", () => {
-        gemeindebauLayer.setVisible(toggle.checked);
-      });
-    }
-
-    buildMap().catch((err) => {
-      console.error("Map setup failed:", err);
-      alert("Map setup failed. See console for details.");
     });
   </script>
 </body>
