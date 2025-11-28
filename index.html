@@ -63,15 +63,32 @@
       const wmtsResponse = await fetch(wmtsUrl);
       if (!wmtsResponse.ok) throw new Error(`WMTS capabilities request failed (${wmtsResponse.status})`);
       const capabilitiesText = await wmtsResponse.text();
-      const capabilities = new ol.format.WMTSCapabilities().read(capabilitiesText);
-      const wmtsOptions = ol.source.WMTS.optionsFromCapabilities(capabilities, {
-        layer: "bmap",
-        matrixSet: "31256",
-        style: "farbe"
+      // Build WMTS source manually (avoids any axis-order quirks)
+      const resolutions = [
+        69359.0720514687, 34679.5360257344, 17339.7680128672, 8669.88400643359,
+        4334.94200321679, 2167.4710016084, 1083.7355008042, 541.867750402099,
+        270.93387520105, 135.466937600525, 67.7334688002624, 33.8667344001312,
+        16.9333672000656, 8.4666836000328, 4.2333418000164, 2.1166709000082,
+        1.0583354500041, 0.52916772500205, 0.264583862501025, 0.132291931250513
+      ];
+      const matrixIds = Array.from({ length: resolutions.length }, (_, i) => i.toString());
+      const tileGrid = new ol.tilegrid.WMTS({
+        origin: [5001000.0, -5622500.0],
+        resolutions,
+        matrixIds,
+        tileSize: [256, 256]
       });
 
       const basemap = new ol.layer.Tile({
-        source: new ol.source.WMTS(wmtsOptions)
+        source: new ol.source.WMTS({
+          url: "https://mapsneu.wien.gv.at/basemap/bmap/{Style}/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.png",
+          layer: "bmap",
+          matrixSet: "31256",
+          format: "image/png",
+          style: "farbe",
+          tileGrid,
+          crossOrigin: "anonymous"
+        })
       });
 
       const gemeindebauLayer = new ol.layer.Vector({
