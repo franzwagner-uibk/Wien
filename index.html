@@ -52,6 +52,27 @@
     }
     .suggestions-item { padding: 6px 8px; cursor: pointer; }
     .suggestions-item:hover { background: #f0f4ff; }
+    .legend {
+      margin-top: 10px;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.95);
+    }
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      margin: 3px 0;
+    }
+    .legend-swatch {
+      width: 22px;
+      height: 12px;
+      border: 1px solid #333;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
     .ol-popup {
       position: absolute;
       background: white;
@@ -100,6 +121,7 @@
       </div>
       <div id="year-labels" style="font-size:12px; margin-top:2px;">1743 – 2025</div>
     </div>
+    <div class="legend" id="legend"></div>
   </div>
   <div id="map"></div>
 
@@ -107,26 +129,7 @@
   <script>
     const targetProjection = ol.proj.get("EPSG:3857");
     const minYearBase = 1743;
-
-    async function createBasemapSources() {
-      const capsUrl = "https://maps.wien.gv.at/basemap/1.0.0/WMTSCapabilities.xml";
-      const text = await (await fetch(capsUrl)).text();
-      const caps = new ol.format.WMTSCapabilities().read(text);
-      const bmapOptions = ol.source.WMTS.optionsFromCapabilities(caps, {
-        layer: "geolandbasemap",
-        matrixSet: "google3857",
-        style: "normal"
-      });
-      const orthoOptions = ol.source.WMTS.optionsFromCapabilities(caps, {
-        layer: "bmaporthofoto30cm",
-        matrixSet: "google3857",
-        style: "normal"
-      });
-      return {
-        bmap: new ol.source.WMTS({ ...bmapOptions, crossOrigin: "anonymous" }),
-        ortho: new ol.source.WMTS({ ...orthoOptions, crossOrigin: "anonymous" })
-      };
-    }
+    const esriAttribution = 'Tiles © Esri';
 
     const vectorSource = new ol.source.Vector();
     const decadeColors = [
@@ -136,7 +139,7 @@
       "#ef6548", "#d7301f", "#b30000", "#7f0000", "#49006a"
     ];
     const styleCache = {};
-    const stroke = new ol.style.Stroke({ color: "#333", width: 1 });
+    const stroke = new ol.style.Stroke({ color: "#333", width: 2.5 });
     function styleByYear(feature) {
       const y = parseInt(feature.get("BAUJAHR"), 10);
       let key = "unknown";
@@ -166,180 +169,202 @@
       style: styleByYear
     });
 
-    createBasemapSources()
-      .then(({ bmap, ortho }) => {
-        const baseLayerBmap = new ol.layer.Tile({ source: bmap, visible: false });
-        const baseLayerOrtho = new ol.layer.Tile({ source: ortho, visible: true });
+    const baseLayerBmap = new ol.layer.Tile({
+      source: new ol.source.XYZ({
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+        attributions: esriAttribution,
+        crossOrigin: "anonymous",
+        maxZoom: 19
+      }),
+      visible: false
+    });
+    const baseLayerOrtho = new ol.layer.Tile({
+      source: new ol.source.XYZ({
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        attributions: esriAttribution,
+        crossOrigin: "anonymous",
+        maxZoom: 19
+      }),
+      visible: true
+    });
 
-        const map = new ol.Map({
-          target: "map",
-          layers: [baseLayerBmap, baseLayerOrtho, gemeindebauLayer],
-          view: new ol.View({
-            projection: targetProjection,
-            center: ol.proj.fromLonLat([16.3738, 48.2082], targetProjection),
-            zoom: 15.5,
-            minZoom: 4,
-            maxZoom: 19
-          })
+    const map = new ol.Map({
+      target: "map",
+      layers: [baseLayerBmap, baseLayerOrtho, gemeindebauLayer],
+      view: new ol.View({
+        projection: targetProjection,
+        center: ol.proj.fromLonLat([16.3738, 48.2082], targetProjection),
+        zoom: 15.5,
+        minZoom: 4,
+        maxZoom: 19
+      })
+    });
+
+    document.querySelectorAll("input[name='basemap']").forEach((radio) => {
+      radio.addEventListener("change", () => {
+        const val = document.querySelector("input[name='basemap']:checked").value;
+        baseLayerBmap.setVisible(val === "bmap");
+        baseLayerOrtho.setVisible(val === "ortho");
+      });
+    });
+    document.getElementById("gemeindebau-toggle").addEventListener("change", (e) => {
+      gemeindebauLayer.setVisible(e.target.checked);
+    });
+    const searchInput = document.getElementById("hof-search");
+    const suggestionsBox = document.getElementById("hof-suggestions");
+
+    // Popup overlay
+    const popupEl = document.createElement("div");
+    popupEl.className = "ol-popup";
+    const popup = new ol.Overlay({
+      element: popupEl,
+      autoPan: { animation: { duration: 200 } }
+    });
+    map.addOverlay(popup);
+
+    // Load local GeoJSON and set up filtering
+    fetch("GEMBAUTENFLOGD.json")
+      .then((r) => {
+        if (!r.ok) throw new Error(`GeoJSON load failed (${r.status})`);
+        return r.json();
+      })
+      .then((data) => {
+        const format = new ol.format.GeoJSON();
+        const allFeatures = format.readFeatures(data, {
+          dataProjection: "EPSG:4326",
+          featureProjection: targetProjection
         });
 
-        document.querySelectorAll("input[name='basemap']").forEach((radio) => {
-          radio.addEventListener("change", () => {
-            const val = document.querySelector("input[name='basemap']:checked").value;
-            baseLayerBmap.setVisible(val === "bmap");
-            baseLayerOrtho.setVisible(val === "ortho");
+        const years = allFeatures
+          .map((f) => parseInt(f.get("BAUJAHR"), 10))
+          .filter((n) => Number.isFinite(n));
+        const minYear = Math.min(...years, minYearBase);
+        const maxYear = Math.max(...years);
+        const yearMin = document.getElementById("year-min");
+        const yearMax = document.getElementById("year-max");
+        const yearLabels = document.getElementById("year-labels");
+        yearMin.min = minYearBase; yearMin.max = maxYear; yearMin.value = Math.max(minYearBase, minYear);
+        yearMax.min = minYearBase; yearMax.max = maxYear; yearMax.value = maxYear;
+        yearLabels.textContent = `${yearMin.value} – ${yearMax.value}`;
+
+        const applyFilter = () => {
+          const lo = Math.min(parseInt(yearMin.value, 10), parseInt(yearMax.value, 10));
+          const hi = Math.max(parseInt(yearMin.value, 10), parseInt(yearMax.value, 10));
+          yearLabels.textContent = `${lo} – ${hi}`;
+          const filtered = allFeatures.filter((f) => {
+            const y = parseInt(f.get("BAUJAHR"), 10);
+            return Number.isFinite(y) && y >= lo && y <= hi;
           });
+          vectorSource.clear(true);
+          vectorSource.addFeatures(filtered);
+        };
+        yearMin.addEventListener("input", applyFilter);
+        yearMax.addEventListener("input", applyFilter);
+
+        vectorSource.addFeatures(allFeatures);
+        applyFilter();
+
+        // Legend
+        const legendEl = document.getElementById("legend");
+        const legendItems = [
+          { label: "< 1900", color: decadeColors[0] }
+        ];
+        for (let start = 1900, i = 1; start <= 2020 && i < decadeColors.length; start += 10, i += 1) {
+          const end = start + 9;
+          legendItems.push({ label: `${start}-${end}`, color: decadeColors[i] || decadeColors[decadeColors.length - 1] });
+        }
+        legendEl.innerHTML = `<div style="font-weight:600; margin-bottom:4px;">Legende</div>` + legendItems.map(item =>
+          `<div class="legend-row"><span class="legend-swatch" style="background:${item.color};"></span><span>${item.label}</span></div>`
+        ).join("");
+
+        // Search index
+        const nameIndex = allFeatures
+          .map((f) => ({
+            id: f.getId() || f.ol_uid,
+            name: (f.get("HOFNAME") || "").toString(),
+            nameLc: (f.get("HOFNAME") || "").toString().toLowerCase(),
+            feature: f
+          }))
+          .filter((n) => n.nameLc.length > 0);
+
+        const renderSuggestions = (matches) => {
+          if (!matches.length) {
+            suggestionsBox.style.display = "none";
+            return;
+          }
+          suggestionsBox.innerHTML = matches
+            .slice(0, 8)
+            .map((m) => `<div class="suggestions-item" data-id="${m.id}">${m.name}</div>`)
+            .join("");
+          suggestionsBox.style.display = "block";
+        };
+
+        const doSearch = (query, fly = false) => {
+          const q = query.toLowerCase().trim();
+          if (q.length < 3) {
+            renderSuggestions([]);
+            return;
+          }
+          const matches = nameIndex.filter((n) => n.nameLc.includes(q));
+          renderSuggestions(matches);
+          if (fly && matches.length) {
+            const f = matches[0].feature;
+            const geom = f.getGeometry();
+            if (geom) {
+              map.getView().fit(geom.getExtent(), { padding: [30, 30, 30, 30], duration: 200 });
+            }
+          }
+        };
+
+        searchInput.addEventListener("input", () => doSearch(searchInput.value));
+        searchInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            doSearch(searchInput.value, true);
+            suggestionsBox.style.display = "none";
+          }
+          if (e.key === "Escape") suggestionsBox.style.display = "none";
         });
-        document.getElementById("gemeindebau-toggle").addEventListener("change", (e) => {
-          gemeindebauLayer.setVisible(e.target.checked);
+        suggestionsBox.addEventListener("click", (e) => {
+          const id = e.target.getAttribute("data-id");
+          if (!id) return;
+          const match = nameIndex.find((n) => (n.id || "").toString() === id.toString());
+          if (match) {
+            const geom = match.feature.getGeometry();
+            if (geom) {
+              map.getView().fit(geom.getExtent(), { padding: [30, 30, 30, 30], duration: 200 });
+            }
+            searchInput.value = match.name;
+          }
+          suggestionsBox.style.display = "none";
         });
-        const searchInput = document.getElementById("hof-search");
-        const suggestionsBox = document.getElementById("hof-suggestions");
 
-        // Popup overlay
-        const popupEl = document.createElement("div");
-        popupEl.className = "ol-popup";
-        const popup = new ol.Overlay({
-          element: popupEl,
-          autoPan: { animation: { duration: 200 } }
-        });
-        map.addOverlay(popup);
-
-        // Load local GeoJSON and set up filtering
-        fetch("GEMBAUTENFLOGD.json")
-          .then((r) => {
-            if (!r.ok) throw new Error(`GeoJSON load failed (${r.status})`);
-            return r.json();
-          })
-          .then((data) => {
-            const format = new ol.format.GeoJSON();
-            const allFeatures = format.readFeatures(data, {
-              dataProjection: "EPSG:4326",
-              featureProjection: targetProjection
-            });
-
-            const years = allFeatures
-              .map((f) => parseInt(f.get("BAUJAHR"), 10))
-              .filter((n) => Number.isFinite(n));
-            const minYear = Math.min(...years, minYearBase);
-            const maxYear = Math.max(...years);
-            const yearMin = document.getElementById("year-min");
-            const yearMax = document.getElementById("year-max");
-            const yearLabels = document.getElementById("year-labels");
-            yearMin.min = minYearBase; yearMin.max = maxYear; yearMin.value = Math.max(minYearBase, minYear);
-            yearMax.min = minYearBase; yearMax.max = maxYear; yearMax.value = maxYear;
-            yearLabels.textContent = `${yearMin.value} – ${yearMax.value}`;
-
-            const applyFilter = () => {
-              const lo = Math.min(parseInt(yearMin.value, 10), parseInt(yearMax.value, 10));
-              const hi = Math.max(parseInt(yearMin.value, 10), parseInt(yearMax.value, 10));
-              yearLabels.textContent = `${lo} – ${hi}`;
-              const filtered = allFeatures.filter((f) => {
-                const y = parseInt(f.get("BAUJAHR"), 10);
-                return Number.isFinite(y) && y >= lo && y <= hi;
-              });
-              vectorSource.clear(true);
-              vectorSource.addFeatures(filtered);
-            };
-            yearMin.addEventListener("input", applyFilter);
-            yearMax.addEventListener("input", applyFilter);
-
-            vectorSource.addFeatures(allFeatures);
-            applyFilter();
-
-            // Search index
-            const nameIndex = allFeatures
-              .map((f) => ({
-                id: f.getId() || f.ol_uid,
-                name: (f.get("HOFNAME") || "").toString(),
-                nameLc: (f.get("HOFNAME") || "").toString().toLowerCase(),
-                feature: f
-              }))
-              .filter((n) => n.nameLc.length > 0);
-
-            const renderSuggestions = (matches) => {
-              if (!matches.length) {
-                suggestionsBox.style.display = "none";
-                return;
-              }
-              suggestionsBox.innerHTML = matches
-                .slice(0, 8)
-                .map((m) => `<div class="suggestions-item" data-id="${m.id}">${m.name}</div>`)
-                .join("");
-              suggestionsBox.style.display = "block";
-            };
-
-            const doSearch = (query, fly = false) => {
-              const q = query.toLowerCase().trim();
-              if (q.length < 3) {
-                renderSuggestions([]);
-                return;
-              }
-              const matches = nameIndex.filter((n) => n.nameLc.includes(q));
-              renderSuggestions(matches);
-              if (fly && matches.length) {
-                const f = matches[0].feature;
-                const geom = f.getGeometry();
-                if (geom) {
-                  map.getView().fit(geom.getExtent(), { padding: [30, 30, 30, 30], duration: 200 });
-                }
-              }
-            };
-
-            searchInput.addEventListener("input", () => doSearch(searchInput.value));
-            searchInput.addEventListener("keydown", (e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                doSearch(searchInput.value, true);
-                suggestionsBox.style.display = "none";
-              }
-              if (e.key === "Escape") suggestionsBox.style.display = "none";
-            });
-            suggestionsBox.addEventListener("click", (e) => {
-              const id = e.target.getAttribute("data-id");
-              if (!id) return;
-              const match = nameIndex.find((n) => (n.id || "").toString() === id.toString());
-              if (match) {
-                const geom = match.feature.getGeometry();
-                if (geom) {
-                  map.getView().fit(geom.getExtent(), { padding: [30, 30, 30, 30], duration: 200 });
-                }
-                searchInput.value = match.name;
-              }
-              suggestionsBox.style.display = "none";
-            });
-
-            map.on("pointerdown", () => {
-              suggestionsBox.style.display = "none";
-            });
-          })
-          .catch((err) => {
-            console.error(err);
-            alert("Konnte die GeoJSON nicht laden. Details in der Konsole.");
-          });
-
-        // Click popup
-        map.on("singleclick", (evt) => {
-          popup.setPosition(undefined);
-          map.forEachFeatureAtPixel(evt.pixel, (feature) => {
-            const p = feature.getProperties();
-            popupEl.innerHTML = `
-              <div style="font-weight:700;margin-bottom:4px;">${p.HOFNAME || "Gemeindebau"}</div>
-              <div><strong>Baujahr:</strong> ${p.BAUJAHR || "-"}</div>
-              <div><strong>Adresse:</strong> ${p.ADRESSE || "-"}</div>
-              <div><strong>Wohnungsanzahl:</strong> ${p.WOHNUNGSANZAHL ?? "-"}</div>
-              <div><strong>Bezirk:</strong> ${p.BEZIRK ?? "-"}</div>
-              <div><a href="${p.PDFLINK || "#"}" target="_blank" rel="noopener">PDF</a></div>
-            `;
-            popup.setPosition(evt.coordinate);
-            return true;
-          });
+        map.on("pointerdown", () => {
+          suggestionsBox.style.display = "none";
         });
       })
       .catch((err) => {
         console.error(err);
-        alert("Basemap konnte nicht geladen werden. Details in der Konsole.");
+        alert("Konnte die GeoJSON nicht laden. Details in der Konsole.");
       });
+
+    // Click popup
+    map.on("singleclick", (evt) => {
+      popup.setPosition(undefined);
+      map.forEachFeatureAtPixel(evt.pixel, (feature) => {
+        const p = feature.getProperties();
+        popupEl.innerHTML = `
+          <div style="font-weight:700;margin-bottom:4px;">${p.HOFNAME || "Gemeindebau"}</div>
+          <div><strong>Baujahr:</strong> ${p.BAUJAHR || "-"}</div>
+          <div><strong>Adresse:</strong> ${p.ADRESSE || "-"}</div>
+          <div><strong>Wohnungsanzahl:</strong> ${p.WOHNUNGSANZAHL ?? "-"}</div>
+          <div><strong>Bezirk:</strong> ${p.BEZIRK ?? "-"}</div>
+          <div><a href="${p.PDFLINK || "#"}" target="_blank" rel="noopener">PDF</a></div>
+        `;
+        popup.setPosition(evt.coordinate);
+        return true;
+      });
+    });
   </script>
 </body>
 </html>
