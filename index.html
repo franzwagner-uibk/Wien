@@ -10,18 +10,18 @@
     #map { width: 100%; height: 100%; }
     .panel {
       position: absolute;
-      top: 12px;
-      right: 12px;
+      top: 10px;
+      right: 10px;
       z-index: 1000;
       background: #f5b342;
-      padding: 10px 12px;
+      padding: 8px 10px;
       border-radius: 10px;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
       font-size: 14px;
       line-height: 1.4;
-      width: 360px;
-      max-width: calc(100% - 24px);
+      width: 320px;
+      max-width: calc(100% - 20px);
     }
     .panel h1 { margin: 0 0 6px; font-size: 16px; font-weight: 700; }
     .panel label { display: flex; align-items: center; gap: 6px; user-select: none; }
@@ -135,9 +135,9 @@
       background: #c0392b;
       transition: width 0.1s linear;
     }
-    .bottom-row { display: flex; gap: 8px; margin-top: 8px; align-items: flex-start; flex-wrap: wrap; }
-    .pie-wrap { flex: 1 1 160px; }
-    .legend-wrap { flex: 1 1 140px; }
+    .bottom-row { display: flex; gap: 6px; margin-top: 6px; align-items: flex-start; flex-wrap: wrap; }
+    .pie-wrap { flex: 1 1 150px; }
+    .legend-wrap { flex: 1 1 130px; }
     .ol-popup {
       position: absolute;
       background: white;
@@ -155,7 +155,7 @@
         left: 50%;
         right: auto;
         transform: translateX(-50%);
-        width: calc(100% - 24px);
+        width: calc(100% - 18px);
       }
       .toggle-row { justify-content: center; }
       details.legend { margin-top: 8px; }
@@ -169,7 +169,7 @@
     <h1>Suessmaus Karte Gemeindebau Wien</h1>
     <div class="search-box">
       <div style="position:relative;">
-        <input id="hof-search" class="search-input" type="text" placeholder="Suche (HOFNAME) – min. 3 Zeichen" autocomplete="off">
+        <input id="hof-search" class="search-input" type="text" placeholder="Suche (HOFNAME) - min. 3 Zeichen" autocomplete="off">
         <div id="hof-suggestions" class="suggestions-list" style="display:none;"></div>
       </div>
     </div>
