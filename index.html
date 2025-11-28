@@ -107,7 +107,7 @@
     </div>
     <div style="margin-top:8px; margin-bottom:6px;">
       <strong>Basemap:</strong>
-      <label style="margin-left:6px;"><input type="radio" name="basemap" value="bmap"> Basemap.at</label>
+      <label style="margin-left:6px;"><input type="radio" name="basemap" value="bmap"> Topo</label>
       <label style="margin-left:6px;"><input type="radio" name="basemap" value="ortho" checked> Orthofoto</label>
     </div>
     <div style="margin-bottom:6px;">
@@ -139,8 +139,7 @@
       "#ef6548", "#d7301f", "#b30000", "#7f0000", "#49006a"
     ];
     const styleCache = {};
-    const stroke = new ol.style.Stroke({ color: "#333", width: 2.5 });
-    function styleByYear(feature) {
+    function styleByYear(feature, resolution) {
       const y = parseInt(feature.get("BAUJAHR"), 10);
       let key = "unknown";
       if (Number.isFinite(y)) {
@@ -150,19 +149,21 @@
           key = `d${idx}`;
         }
       }
-      if (!styleCache[key]) {
+      const width = Math.max(1, Math.min(6, 0.5 + resolution / 20)); // thicker when zoomed out
+      const cacheKey = `${key}-${Math.round(width * 10)}`; // bucket by width
+      if (!styleCache[cacheKey]) {
         let fillColor = "#cccccc";
         if (key === "<1900") fillColor = decadeColors[0];
         else if (key.startsWith("d")) {
           const idx = Math.min(decadeColors.length - 2, parseInt(key.slice(1), 10));
           fillColor = decadeColors[1 + idx] || decadeColors[decadeColors.length - 1];
         }
-        styleCache[key] = new ol.style.Style({
-          stroke,
+        styleCache[cacheKey] = new ol.style.Style({
+          stroke: new ol.style.Stroke({ color: "#333", width }),
           fill: new ol.style.Fill({ color: fillColor + "cc" })
         });
       }
-      return styleCache[key];
+      return styleCache[cacheKey];
     }
     const gemeindebauLayer = new ol.layer.Vector({
       source: vectorSource,
